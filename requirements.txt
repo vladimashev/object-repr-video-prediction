@@ -11,6 +11,7 @@ matplotlib
 scikit-learn
 scipy
 opencv-python
+scikit_image
 
 tqdm
 
