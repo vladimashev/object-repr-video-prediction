@@ -31,9 +31,9 @@ class ViTPatchEncoder(nn.Module):
         x:  (B, T*num_patches, patch_dim)
         Returns: (B, T*num_patches, embed_dim)
         """
-        tokens = self.patch_projection(x)   # (B, L, embed_dim)
+        tokens = self.patch_projection(x)   # (B, T*num_patches, embed_dim)
         tokens = self.pos_emb(tokens)       #
-        out = self.transformer_blocks(tokens)  # (B, L, embed_dim)
+        out = self.transformer_blocks(tokens)  # (B, T*num_patches, embed_dim)
         return out
 
 

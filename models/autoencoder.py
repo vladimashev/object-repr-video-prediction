@@ -5,7 +5,7 @@ from torch import Tensor
 
 
 class ImageAutoencoder(nn.Module):
-    def __init__(self, patch_size: int, encoder: nn.Module, decoder: nn.Module):
+    def __init__(self, encoder: nn.Module, decoder: nn.Module, patch_size: int):
         super().__init__()
         self.patchifier = Patchifier(patch_size)
         self.encoder = encoder
@@ -14,10 +14,7 @@ class ImageAutoencoder(nn.Module):
 
     def forward(self,  x: Tensor)-> Tensor:  # x is of shape [B, T, C, H, W]
         patches = self.patchifier(x)  # [B, T*N_patches, patch_dim]
-        batch_size, num_patches, patch_dim = patches.shape
-        C = x.shape[2]
-        patches = patches.view(batch_size * num_patches, C, self.patch_size, self.patch_size)  # [B*N_patches, 3, p, p]
-        
+        patch_dim = patches.shape[2]
         z = self.encoder(patches)
         recon = self.decoder(z)
         recon = recon.view(batch_size, num_patches, patch_dim)

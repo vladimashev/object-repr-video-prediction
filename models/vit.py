@@ -45,11 +45,11 @@ class ViT(nn.Module):
         """ 
         Forward pass
         """
-        B = x.shape[0]  # (B, T, 3, 32, 32)
+        B = x.shape[0]  # (B, T, C, H, W)
         
         # breaking image into patches, and projection to transformer token dimension
-        patches = self.pathchifier(x)  # (B, 16, 8 * 8 * 3)
-        patch_tokens = self.patch_projection(patches)  # (B, 16, D)
+        patches = self.pathchifier(x)  # (B, T*num_patches, patch_dim)
+        patch_tokens = self.patch_projection(patches)  # (B, 16, D) ????
 
         # concatenating CLS token and adding positional embeddings
         cur_cls_token = self.cls_token.unsqueeze(0).repeat(B, 1, 1)
