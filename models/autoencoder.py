@@ -12,10 +12,22 @@ class ImageAutoencoder(nn.Module):
         self.decoder = decoder
         self.patch_size = patch_size
 
-    def forward(self,  x: Tensor)-> Tensor:  # x is of shape [B, T, C, H, W]
+    def forward(self,  x: Tensor)-> Tensor:  # x is of shape [B, C, H, W]
+        x = x.unsqueeze(1) # x is of shape [B, T, C, H, W]
+        B, T, C, H, W = x.shape
+        
         patches = self.patchifier(x)  # [B, T*N_patches, patch_dim]
-        patch_dim = patches.shape[2]
+
+        batch_size, num_patches, patch_dim = patches.shape
         z = self.encoder(patches)
         recon = self.decoder(z)
+
         recon = recon.view(batch_size, num_patches, patch_dim)
+        nH, nW = H // self.patch_size, W // self.patch_size
+        # (B,T*N_patches, patch_dim) -> (B,T,nH,nW,C,p,p) -> (B,T,C,H,W)
+        recon = recon.view(B, T, nH, nW, C, self.patch_size, self.patch_size).permute(0,1,4,2,5,3,6).contiguous()
+        recon = recon.view(B, T, C, H, W)
+
+        # remove T
+        recon = recon.squeeze(1)
         return recon

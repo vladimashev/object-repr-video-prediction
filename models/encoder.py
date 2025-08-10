@@ -7,11 +7,11 @@ class ViTPatchEncoder(nn.Module):
     """
     Encodes patches into embeddings.
     """
-    def __init__(self, patch_dim, embed_dim, max_len, attn_dim, num_heads, mlp_size, num_tf_layers):
+    def __init__(self, patch_size, embed_dim, max_len, attn_dim, num_heads, mlp_size, num_tf_layers):
         super().__init__()
         self.patch_projection = nn.Sequential(
-            nn.LayerNorm(patch_dim),
-            nn.Linear(patch_dim, embed_dim)
+            nn.LayerNorm(patch_size * patch_size * 3),
+            nn.Linear(patch_size * patch_size * 3, embed_dim)
         )
         self.pos_emb = PositionalEncoding(embed_dim, max_len)
 

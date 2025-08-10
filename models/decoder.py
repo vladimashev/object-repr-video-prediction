@@ -8,7 +8,7 @@ class ViTPatchDecoder(nn.Module):
     """
     Decodes emdebbings back to patches
     """
-    def __init__(self, patch_dim, embed_dim, max_len, attn_dim, num_heads, mlp_size, num_tf_layers,
+    def __init__(self, patch_size, embed_dim, max_len, attn_dim, num_heads, mlp_size, num_tf_layers,
                  use_positional_encoding: bool = True):
         super().__init__()
 
@@ -29,6 +29,7 @@ class ViTPatchDecoder(nn.Module):
         self.transformer_blocks = nn.Sequential(*blocks)
 
         # project from embedding dimension to patches
+        patch_dim = patch_size * patch_size * 3
         self.to_patch = nn.Linear(embed_dim, patch_dim)
 
     def forward(self, x):
