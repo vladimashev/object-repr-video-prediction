@@ -8,8 +8,8 @@ from torch.utils.data import Dataset
 import torchvision.transforms.functional as F
 from torchvision.transforms import RandomHorizontalFlip, RandomVerticalFlip, RandomRotation, ColorJitter, Resize, InterpolationMode
 
-
-class ImageDataset(Dataset):
+class FrameDataset(Dataset):
+    """ Abstract class for flattened mask/frame storage, no aggregation by sequence """
     def __init__(self, image_dir, transform):
         super().__init__()
         self.image_dir = image_dir
@@ -40,6 +40,20 @@ class ImageDataset(Dataset):
             "mask": img_mask
         }
 
+class ImageDataset(FrameDataset):
+    """ Full frame dataset """
+    # TODO patched encoding
+    def __init__(self, image_dir, transform):
+        super().__init__(image_dir, transform)
+        self.image_dir = image_dir
+        self.transform = transform
+        self.paths = []
+        self._load_data()
+
+    def __getitem__(self, idx):
+        item = super().__getitem__(idx)
+        
+        return item["img"]
 
 class SynchronizedTransform:
     def __init__(self, transform):

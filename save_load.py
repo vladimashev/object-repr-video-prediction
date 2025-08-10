@@ -13,7 +13,7 @@ def get_default_model_name():
     return datetime.now().strftime(f"checkpoint-%H-%M_%d-%m-%Y")
 
 
-def save_model(model, optimizer, stats = {},
+def save_model(model, optimizer, scheduler = None, stats = {},
                model_name = get_default_model_name(),
                save_path = get_save_root()):
     """ Saving model checkpoint """
@@ -25,10 +25,11 @@ def save_model(model, optimizer, stats = {},
     torch.save({
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
         'stats': stats
     }, savepath)
 
-    print(f"Saved state to {savepath}")
+    print(f"Saved {model_name}'s state to {savepath}")
     
     return savepath
 
