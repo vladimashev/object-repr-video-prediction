@@ -37,7 +37,7 @@ class Trainer:
     def _setup_experiment(self, experiment_name: str = 'model'):
         """ Sets up folders for experiments """
         save_root = 'experiments'
-        timestamp = datetime.now().strftime("%Y-%m-%d")
+        timestamp = datetime.now().strftime("%H-%M_%d-%m-%Y")
         exp_dir = os.path.join(save_root, f"{timestamp}_{experiment_name}")
         os.makedirs(exp_dir, exist_ok=True)
         # tensorboard folder
@@ -95,16 +95,16 @@ class Trainer:
         return loss_item
 
     
-    def train(self, train_loader, val_loader, epochs=10, init_step=0):
+    def train(self, train_loader, val_loader, epochs=10, init_step=0, eval_freq=1e3, save_freq=None):
         """ Training the models for several iterations """
-        EVAL_FREQUENCY = 200 # how often to evaluate
-        SAVE_FREQUENCY = 200 # how often to take snapshots
-        
-        progress_bar = tqdm(total=epochs, initial=init_step)
-        
         iter_ = 0
         total_batches = len(train_loader)
         batch_size = train_loader.batch_size
+
+        EVAL_FREQUENCY = eval_freq # how often to evaluate
+        SAVE_FREQUENCY = save_freq if save_freq else total_batches - 1 # how often to take snapshots
+        
+        progress_bar = tqdm(total=epochs, initial=init_step)
 
         for epoch in range(epochs):
             loss_list = []
@@ -147,47 +147,52 @@ class Trainer:
                     self.model.train()
 
                     assert isinstance(eval_metrics, dict), "Eval metrics must be of dict type for CSV logging."
+                    eval_metric_names = eval_metrics.keys()
+
                     csv_headers = ["iter", "batch_size", "epoch", "loss", "mean_loss"]
-                    csv_headers += eval_metrics.keys()
+                    csv_headers += eval_metric_names
                     metrics = {**train_metrics, **eval_metrics}
                     self._log(metrics)
                     self._log_to_csv(metrics, csv_headers)
 
+                    for metric_name in eval_metric_names:
+                        self.writer.add_scalar(f"{metric_name}/Valid", eval_metrics[metric_name], global_step=iter_)
+
                     # image logging
-                    with torch.no_grad():
-                        self.model.eval()
-                        recon = self.model(batch)  # no grad here
-                        grid = torchvision.utils.make_grid(recon.detach().cpu())
-                        self.writer.add_image('Images/Train', grid, global_step=iter_)
-                        torchvision.utils.save_image(grid, os.path.join(self.dir_imgs, f"imgs_{iter_+1}.png"))
-                        del recon, grid
-                        self.model.train()
-                    # grid = torchvision.utils.make_grid(self.model(batch))
-                    # self.writer.add_image('Images/Train', grid, global_step=iter_)
-                    # torchvision.utils.save_image(grid, os.path.join(self.dir_imgs, f"imgs_{iter_+1}.png"))
+                    if (iter_ > 0):
+                        with torch.no_grad():
+                            self.model.eval()
+                            recon = self.model(batch)
+                            grid = torchvision.utils.make_grid(recon.detach().cpu())
+                            self.writer.add_image('Images/Train', grid, global_step=iter_)
+                            torchvision.utils.save_image(grid, os.path.join(self.dir_imgs, f"imgs_{iter_}.png"))
+                            del recon, grid
+
+                            self.model.train()
                     
                 # o/w track only train metrics
                 else:
                     self._log_to_csv(train_metrics, csv_headers)
 
                 # SAVE SNAPSHOT
-                if (iter_ % SAVE_FREQUENCY == 0):
+                if (iter_ > 0) and (iter_ % SAVE_FREQUENCY == 0):
+                    finished_epoch = iter_+1 // total_batches
                     save_model(self.model, self.optimizer, self.scheduler,
-                               stats={ "epoch": epoch, "iter_": iter_ },
+                               stats={ "epoch": finished_epoch, "iter_": iter_+1 },
                                save_path=self.dir_checkpoints,
-                               model_name=f"epoch_{epoch:03d}_iter_{iter_:05d}")
+                               model_name=f"epoch_{finished_epoch:03d}_iter_{iter_+1:05d}")
                 
                 iter_ = iter_ + 1
             
-            progress_bar.write(f"Progress: {epoch}%", file=self.file_logs)
-
             if self.scheduler: self.scheduler.step(mean_loss)
 
         print(f"Training completed")
 
-        save_model(self.best_model, self.best_optimizer, self.best_scheduler,
-                    stats={ "epoch": self.best_epoch },
-                    save_path=self.dir_checkpoints,
-                    model_name=f"best_model_{self.best_epoch:03d}")
+        torch.save({
+            'model_state_dict': self.best_model,
+            'optimizer_state_dict': self.best_optimizer,
+            'scheduler_state_dict': self.best_scheduler,
+            'stats': { "epoch": self.best_epoch }
+        }, f"{self.dir_checkpoints}/best_model_{self.best_epoch:03d}.pth")
 
         return
