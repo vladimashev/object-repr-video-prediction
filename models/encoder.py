@@ -1,14 +1,16 @@
 import torch
 import torch.nn as nn
+from models.patchifier import Patchifier
 from models.positional_encoding import PositionalEncoding
 from models.transformer_block import TransformerBlock
 
 class ViTPatchEncoder(nn.Module):
     """
-    Encodes patches into embeddings.
+    Breaks frames into patches and encodes into embeddings.
     """
     def __init__(self, patch_size, embed_dim, max_len, attn_dim, num_heads, mlp_size, num_tf_layers):
         super().__init__()
+        self.patchifier = Patchifier(patch_size)
         self.patch_projection = nn.Sequential(
             nn.LayerNorm(patch_size * patch_size * 3),
             nn.Linear(patch_size * patch_size * 3, embed_dim)
@@ -28,12 +30,21 @@ class ViTPatchEncoder(nn.Module):
 
     def forward(self, x):
         """
-        x:  (B, T*num_patches, patch_dim)
-        Returns: (B, T*num_patches, embed_dim)
+        x:  (B, T, C, H, W)
+        Returns: (B, T, num_patches, embed_dim)
         """
-        tokens = self.patch_projection(x)   # (B, T*num_patches, embed_dim)
-        tokens = self.pos_emb(tokens)       #
-        out = self.transformer_blocks(tokens)  # (B, T*num_patches, embed_dim)
+        B, T, _, _, _ = x.shape
+        
+        patches = self.patchifier(x)  # [B, T*num_patches, patch_dim]
+        tokens = self.patch_projection(patches)   # (B, T*num_patches, embed_dim)
+
+        embed_dim = tokens.size(-1)
+        # per-frame attention: (B, T*num_patches, embed_dim) -> (B, T, num_patches, embed_dim) -> (B*T, num_patches, embed_dim)
+        tokens = tokens.view(B, T, -1, embed_dim).reshape(B * T, -1, embed_dim)
+        
+        tokens = self.pos_emb(tokens)
+        out = self.transformer_blocks(tokens)  # (B*T, num_patches, embed_dim)
+        out = tokens.view(B, T, -1, embed_dim)   # (B, T, num_patches, embed_dim)
         return out
 
 

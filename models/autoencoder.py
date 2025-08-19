@@ -7,7 +7,6 @@ from torch import Tensor
 class ImageAutoencoder(nn.Module):
     def __init__(self, encoder: nn.Module, decoder: nn.Module, patch_size: int):
         super().__init__()
-        self.patchifier = Patchifier(patch_size)
         self.encoder = encoder
         self.decoder = decoder
         self.patch_size = patch_size
@@ -16,18 +15,14 @@ class ImageAutoencoder(nn.Module):
         x = x.unsqueeze(1) # x is of shape [B, T, C, H, W]
         B, T, C, H, W = x.shape
         
-        patches = self.patchifier(x)  # [B, T*N_patches, patch_dim]
+        z = self.encoder(x) # (B, T, num_patches, embed_dim)
+        recon = self.decoder(z) # first (B, T, num_patches, patch_dim) and then it returns (B, T, C, H, W)
 
-        batch_size, num_patches, patch_dim = patches.shape
-        z = self.encoder(patches)
-        recon = self.decoder(z)
+        # nH, nW = H // self.patch_size, W // self.patch_size
+        # # (B, T, num_patches, patch_dim) -> (B,T,nH,nW,C,p,p) -> (B,T,C,H,W)
+        # recon = recon.view(B, T, nH, nW, C, self.patch_size, self.patch_size).permute(0,1,4,2,5,3,6).contiguous()
+        # recon = recon.view(B, T, C, H, W)
 
-        recon = recon.view(batch_size, num_patches, patch_dim)
-        nH, nW = H // self.patch_size, W // self.patch_size
-        # (B,T*N_patches, patch_dim) -> (B,T,nH,nW,C,p,p) -> (B,T,C,H,W)
-        recon = recon.view(B, T, nH, nW, C, self.patch_size, self.patch_size).permute(0,1,4,2,5,3,6).contiguous()
-        recon = recon.view(B, T, C, H, W)
-
-        # remove T
+        # remove T, because we are working with single image in this case
         recon = recon.squeeze(1)
         return recon

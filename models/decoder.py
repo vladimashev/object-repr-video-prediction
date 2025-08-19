@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from models.patchifier import Patchifier
 from models.positional_encoding import PositionalEncoding
 from models.transformer_block import TransformerBlock
 
@@ -8,7 +9,7 @@ class ViTPatchDecoder(nn.Module):
     """
     Decodes emdebbings back to patches
     """
-    def __init__(self, patch_size, embed_dim, max_len, attn_dim, num_heads, mlp_size, num_tf_layers,
+    def __init__(self, H, W, patch_size, embed_dim, max_len, attn_dim, num_heads, mlp_size, num_tf_layers,
                  use_positional_encoding: bool = True):
         super().__init__()
 
@@ -28,22 +29,34 @@ class ViTPatchDecoder(nn.Module):
         ]
         self.transformer_blocks = nn.Sequential(*blocks)
 
+        self.H = H
+        self.W = W
+        self.patch_size = patch_size
         # project from embedding dimension to patches
         patch_dim = patch_size * patch_size * 3
         self.to_patch = nn.Linear(embed_dim, patch_dim)
 
     def forward(self, x):
         """
-        x: (B, T*num_patches, embed_dim)
-        -> (B, T*num_patches, patch_dim)
-        Here T=1 actually, so sequence legnth=1 (because we apply attention only to the patches in the cuttent frame)
+        x: (B, T, num_patches, embed_dim)
+        -> (B, T, num_patches, patch_dim)
         """
+        B, T, num_patches, embed_dim = x.shape
         tokens = self.input_norm(x)
 
+        # per-frame attention: (B, T*num_patches, embed_dim) -> (B, T, num_patches, embed_dim) -> (B*T, num_patches, embed_dim)
+        tokens = tokens.reshape(B * T, num_patches, embed_dim)
         if self.use_positional_encoding:
             tokens = self.pos_emb(tokens)
 
-        tokens = self.transformer_blocks(tokens)  # (B, T*num_patches, embed_dim)
-        out = self.to_patch(tokens)               # (B, T*num_patches, patch_dim)
+        tokens = self.transformer_blocks(tokens)  # (B*T, num_patches, embed_dim)
+        out = self.to_patch(tokens)               # (B*T, num_patches, patch_dim)
+        out = out.view(B, T, num_patches, -1) # (B, T, num_patches, patch_dim)
+
+        nH, nW = self.H // self.patch_size, self.W // self.patch_size
+        # (B, T, num_patches, patch_dim) -> (B,T,nH,nW,C,p,p) -> (B,T,C,H,W)
+        out = out.view(B, T, nH, nW, 3, self.patch_size, self.patch_size).permute(0,1,4,2,5,3,6).contiguous()
+        out = out.view(B, T, 3, self.H, self.W)
+        
         return out
 
