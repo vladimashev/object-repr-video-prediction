@@ -13,7 +13,9 @@ GET_DEFAULT_OPTIMIZER = lambda m: torch.optim.Adam(m.parameters(), lr=1e-3)
 DEFAULT_CRITERION = torch.nn.MSELoss()
 
 class Trainer:
-    def __init__(self, model, evaluate, optimizer=None, criterion=None, scheduler=None):
+    def __init__(self, model, evaluate,
+                 optimizer=None, criterion=None, scheduler=None,
+                 experiment_name: str = 'model'):
         """ Initialzer """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.optimizer = optimizer if optimizer else GET_DEFAULT_OPTIMIZER(model)
@@ -30,11 +32,11 @@ class Trainer:
         self.best_epoch = 0
         self.best_loss = 1e10 # best mean loss
 
-        self._setup_experiment('ConvAE')
+        self._setup_experiment(experiment_name)
 
         return
 
-    def _setup_experiment(self, experiment_name: str = 'model'):
+    def _setup_experiment(self, experiment_name):
         """ Sets up folders for experiments """
         save_root = 'experiments'
         timestamp = datetime.now().strftime("%H-%M_%d-%m-%Y")
@@ -59,6 +61,9 @@ class Trainer:
         self.file_logs = os.path.join(dir_logs, 'logs.txt') # console output saves
         logs_exists = os.path.isfile(self.file_logs)
         if not logs_exists: open(self.file_logs, "x")
+        
+        with open(os.path.join(dir_logs, 'model_architecture.txt'), "w") as f:
+            print(self.model, file=f)
 
         return
         
@@ -111,7 +116,9 @@ class Trainer:
             mean_loss = .0
 
             for batch in train_loader:
-                batch = batch.to(self.device)
+                # TODO!
+                # batch = batch.to(self.device)
+                batch = tuple(t.to(self.device) for t in batch)
                 loss_item = self.train_one_step(batch)
                 loss_list.append(loss_item)
             
@@ -176,7 +183,7 @@ class Trainer:
 
                 # SAVE SNAPSHOT
                 if (iter_ > 0) and (iter_ % SAVE_FREQUENCY == 0):
-                    finished_epoch = iter_+1 // total_batches
+                    finished_epoch = (iter_+1) // total_batches
                     save_model(self.model, self.optimizer, self.scheduler,
                                stats={ "epoch": finished_epoch, "iter_": iter_+1 },
                                save_path=self.dir_checkpoints,
