@@ -48,6 +48,8 @@ class ViTPatchEncoder(nn.Module):
         return out
 
 
+
+'''
 class ConvPatchEncoder(nn.Module):
     def __init__(self, patch_size):
         super().__init__()
@@ -69,3 +71,4 @@ class ConvPatchEncoder(nn.Module):
         patches = patches.view(B * L, 3, self.patch_size, self.patch_size)
         out = self.encoder(patches)
         return out
+'''

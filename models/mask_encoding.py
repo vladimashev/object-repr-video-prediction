@@ -1,68 +1,123 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-# MOVi-C has up to 10 objects + add one more for background
-DEFAULT_OBJECTS_COUNT = 11
+DEFAULT_OBJECT_NUM = 10
 
-class MaskEncoder(nn.Module):
-    def __init__(self, obj_num=DEFAULT_OBJECTS_COUNT):
+class ObjectEncoder(nn.Module):
+    def __init__(self, obj_num=DEFAULT_OBJECT_NUM):
         super().__init__()
         self.obj_num = obj_num
-    
+
     def forward(self, item):
-        img, masks = item
+        imgs, masks = item    # imgs: [B, C, H, W], masks: [B, H, W]
+        # B, C, H, W = imgs.shape
+
+        # K = masks.max().item() + 1
+        # one_hot = F.one_hot(masks, num_classes=K).permute(0, 3, 1, 2).float()  # [B, K, H, W]
+        # objects = imgs.unsqueeze(1) * one_hot.unsqueeze(2)   # [B, K, C, H, W]
         objects = []
+        for k in range(self.obj_num):
+            mask_k = (masks == k).unsqueeze(1)    # [B,1,H,W]
+            obj_k = imgs * mask_k                 # [B,C,H,W]
+            objects.append(obj_k.unsqueeze(1))    # keep slot dim
+        objects = torch.cat(objects, dim=1)       # [B, obj_num, C, H, W]
 
-        img = img.float()      # [C, H, W]
-        segmap = masks.long()  # [H, W], integer labels
+        # Enforce fixed number of objects
+        # if K < self.obj_num:
+        #     pad = torch.zeros(B, self.obj_num - K, C, H, W, device=imgs.device, dtype=imgs.dtype)
+        #     objects = torch.cat([objects, pad], dim=1) 
+        # elif K > self.obj_num:
+        #     objects = objects[:, :self.obj_num]
 
-        # get unique object IDs (exclude background=0)
-        obj_ids = torch.unique(segmap)
-        obj_ids = obj_ids[obj_ids != 0]
-
-        # extract each object by ID
-        for oid in obj_ids:
-            mask = (segmap == oid).float()      # [H, W]
-            masked_obj = img * mask.unsqueeze(0)  # [C, H, W]
-            objects.append(masked_obj)
-
-        # compute background separately
-        BG_ID = 0
-        bg_mask = (segmap == BG_ID).float()
-        background = img * bg_mask.unsqueeze(0)
-        objects.append(background)
-
-        # Now enforce fixed number of objects
-        num_objs = len(objects)
-        if num_objs < self.obj_num:
-            # add empty objects
-            pad_objs = [torch.zeros_like(img) for _ in range(self.obj_num - num_objs)]
-            objects.extend(pad_objs)
-        # ?could there be more objects? remove then?
-        elif num_objs > self.obj_num:
-            objects = objects[:self.obj_num]
-
-        objects = torch.stack(objects, dim=0)  # [obj_num, C, H, W]
-
-        return objects
+        return objects  # [B, obj_num, C, H, W]
 
 
-class MaskDecoder(nn.Module):
+class ObjectDecoder(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, objects):
-        BG_ID = -1 # assume bg is the last obj in array
-        
-        # last object might be empty embedding,
-        # iterate until first non-zero is met
-        for i in reversed(range(objects.shape[0])):
-            if objects[i].sum() > 0:
-                BG_ID = i
-                break
-        background = objects[BG_ID]
-        
-        obj_slots = objects[:BG_ID]
+    def forward(self, item):
+        objects, masks = item
+        recon = torch.zeros_like(objects[:,0])
+        for k in range(objects.shape[1]):
+            recon += objects[:,k] * (masks == k).unsqueeze(1).float()
+        return recon
 
-        # TODO what if objects overlap? for now assume they are always disjoint
-        return torch.clamp(obj_slots.sum(dim=0) + background, 0, 1)
+    # def forward(self, objects):
+    #     # objects: [B, obj_num, C, H, W]
+    #     # assume background is slot 0
+    #     background = objects[:, 0]             # [B, C, H, W]
+    #     obj_slots = objects[:, 1:]
+
+    #     recon = obj_slots.sum(dim=1) + background
+    #     return recon
+    #     # return torch.clamp(recon, 0, 1)        # [B, C, H, W]
+
+
+class SlotEncoder(nn.Module):
+    def __init__(self, in_ch=3, d_model=128):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(in_ch, 64, 4, stride=2, padding=1), nn.ReLU(True),
+            nn.Conv2d(64, 128, 4, stride=2, padding=1), nn.ReLU(True),
+            nn.Conv2d(128, 128, 3, stride=1, padding=1), nn.ReLU(True),
+        )
+        self.proj = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(128, d_model)
+        )
+
+    def forward(self, x):  # [B*object_num, C, H, W]
+        f = self.net(x)
+        z = self.proj(f)  # [B*object_num, d_model]
+        return z
+
+class SlotDecoder(nn.Module):
+    def __init__(self, d_model=128, out_ch=3, out_size=(64,64)):
+        super().__init__()
+        H, W = out_size
+        self.init_hw = (H // 4, W // 4)   # adjust to match encoder downsampling
+        self.fc = nn.Linear(d_model, 128 * self.init_hw[0] * self.init_hw[1])
+        self.net = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1), nn.ReLU(True),
+            nn.ConvTranspose2d(64, out_ch, 4, stride=2, padding=1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, z):  # [B*object_num, d_model]
+        Bn, _D = z.shape
+        h, w = self.init_hw
+        x = self.fc(z).view(Bn, 128, h, w)
+        return self.net(x)  # [B*object_num, C, H, W]
+
+class ObjectAutoencoder(nn.Module):
+    def __init__(self, object_encoder, object_decoder, obj_num=DEFAULT_OBJECT_NUM,
+                 img_size=(64,64), in_ch=3, d_model=128):
+        super().__init__()
+        self.object_encoder = object_encoder
+        self.object_decoder = object_decoder
+        self.slot_enc = SlotEncoder(in_ch=in_ch, d_model=d_model)
+        self.slot_dec = SlotDecoder(d_model=d_model, out_ch=in_ch, out_size=img_size)
+        self.obj_num = obj_num
+        self.d_model = d_model
+
+    def forward(self, item):
+        """
+        frame:  [B,C,H,W]
+        segmap: [B,H,W]   (object segmentation map)
+        """
+        frame, segmap = item
+        # 1) Decompose frame into object slots
+        slots = self.object_encoder((frame, segmap))  # [B, N, C, H, W]
+
+        B, N, C, H, W = slots.shape
+        # 2) Encode slots -> embeddings
+        z = self.slot_enc(slots.reshape(B*N, C, H, W))         # [B*N, D]
+        # 3) Decode back to slots
+        slots_recon = self.slot_dec(z).reshape(B, N, C, H, W)  # [B, N, C, H, W]
+        # 4) Reassemble frame
+        frame_recon = self.object_decoder((slots_recon, segmap))      # [B, C, H, W]
+
+        return frame_recon, slots, slots_recon

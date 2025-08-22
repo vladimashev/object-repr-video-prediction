@@ -2,12 +2,14 @@ from datetime import datetime
 import os
 import numpy as np
 import torch
-from tqdm import tqdm
 import torchvision
+from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 import csv
 
 from save_load import save_model
+from utils.move_to_device import move_to_device
+
 
 GET_DEFAULT_OPTIMIZER = lambda m: torch.optim.Adam(m.parameters(), lr=1e-3)
 DEFAULT_CRITERION = torch.nn.MSELoss()
@@ -39,7 +41,7 @@ class Trainer:
     def _setup_experiment(self, experiment_name):
         """ Sets up folders for experiments """
         save_root = 'experiments'
-        timestamp = datetime.now().strftime("%H-%M_%d-%m-%Y")
+        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
         exp_dir = os.path.join(save_root, f"{timestamp}_{experiment_name}")
         os.makedirs(exp_dir, exist_ok=True)
         # tensorboard folder
@@ -88,6 +90,7 @@ class Trainer:
         self.optimizer.zero_grad()
         
         outputs = self.model(inputs)
+        # print(outputs.mean(), inputs[0].mean())
         loss = self.criterion(outputs, inputs)
         loss.backward()
         self.optimizer.step()
@@ -116,9 +119,8 @@ class Trainer:
             mean_loss = .0
 
             for batch in train_loader:
-                # TODO!
-                # batch = batch.to(self.device)
-                batch = tuple(t.to(self.device) for t in batch)
+                batch = move_to_device(batch, self.device)
+                
                 loss_item = self.train_one_step(batch)
                 loss_list.append(loss_item)
             
@@ -147,8 +149,10 @@ class Trainer:
                         self.best_loss = mean_loss
                         self.best_epoch = epoch
                 
+                
+                csv_headers = ["iter", "batch_size", "epoch", "loss", "mean_loss"]
                 # EVALUATION STEP
-                if (iter_ % EVAL_FREQUENCY == 0):
+                if (iter_ % EVAL_FREQUENCY == 0 and self.evaluate is not None):
                     # evaluation metrics
                     eval_metrics = self.evaluate(self.model, val_loader, self.device)
                     self.model.train()
@@ -156,7 +160,6 @@ class Trainer:
                     assert isinstance(eval_metrics, dict), "Eval metrics must be of dict type for CSV logging."
                     eval_metric_names = eval_metrics.keys()
 
-                    csv_headers = ["iter", "batch_size", "epoch", "loss", "mean_loss"]
                     csv_headers += eval_metric_names
                     metrics = {**train_metrics, **eval_metrics}
                     self._log(metrics)
