@@ -47,6 +47,38 @@ class ViTPatchEncoder(nn.Module):
         out = tokens.view(B, T, -1, embed_dim)   # (B, T, num_patches, embed_dim)
         return out
 
+class ObjectTransformerEncoder(nn.Module):
+    def __init__(self, obj_num, C, H, W, embed_dim, attn_dim, num_heads, mlp_size, num_tf_layers):
+        super().__init__()
+        self.obj_num = obj_num
+        self.slot_dim = C * H * W   # flattened object image
+        self.projection = nn.Sequential(
+            nn.LayerNorm(self.slot_dim),
+            nn.Linear(self.slot_dim, embed_dim)
+        )
+        self.pos_emb = PositionalEncoding(embed_dim, obj_num)
+
+        blocks = [
+            TransformerBlock(
+                token_dim=embed_dim,
+                attn_dim=attn_dim,
+                num_heads=num_heads,
+                mlp_size=mlp_size
+            )
+            for _ in range(num_tf_layers)
+        ]
+        self.transformer_blocks = nn.Sequential(*blocks)
+
+    def forward(self, objects):
+        """
+        objects: [B, O, C, H, W] (from ObjectEncoder)
+        """
+        B, O, C, H, W = objects.shape
+        tokens = objects.view(B, O, -1)          # flatten object slots -> [B, O, slot_dim]
+        tokens = self.projection(tokens)         # [B, O, embed_dim]
+        tokens = self.pos_emb(tokens)
+        out = self.transformer_blocks(tokens)    # [B, O, embed_dim]
+        return out
 
 
 '''

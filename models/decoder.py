@@ -60,3 +60,40 @@ class ViTPatchDecoder(nn.Module):
         
         return out
 
+class ObjectTransformerDecoder(nn.Module):
+    def __init__(self, obj_num, C, H, W, embed_dim, attn_dim, num_heads, mlp_size, num_tf_layers):
+        super().__init__()
+        self.obj_num = obj_num
+        self.slot_dim = C * H * W
+        self.C = C
+        self.H = H
+        self.W = W
+
+        self.input_norm = nn.LayerNorm(embed_dim)
+        self.pos_emb = PositionalEncoding(embed_dim, obj_num)
+
+        blocks = [
+            TransformerBlock(
+                token_dim=embed_dim,
+                attn_dim=attn_dim,
+                num_heads=num_heads,
+                mlp_size=mlp_size
+            )
+            for _ in range(num_tf_layers)
+        ]
+        self.transformer_blocks = nn.Sequential(*blocks)
+
+        self.to_object = nn.Linear(embed_dim, self.slot_dim)
+
+    def forward(self, tokens):
+        """
+        tokens: [B, O, embed_dim]
+        returns: [B, O, C, H, W] object reconstructions
+        """
+        B, O, _ = tokens.shape
+        tokens = self.input_norm(tokens)
+        tokens = self.pos_emb(tokens)
+        tokens = self.transformer_blocks(tokens)   # [B, O, embed_dim]
+        out = self.to_object(tokens)               # [B, O, slot_dim]
+        out = out.view(B, O, self.C, self.H, self.W)             # [B, O, C, H, W]
+        return out

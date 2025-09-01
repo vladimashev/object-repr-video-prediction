@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 DEFAULT_OBJECT_NUM = 10
 
@@ -11,24 +10,13 @@ class ObjectEncoder(nn.Module):
 
     def forward(self, item):
         imgs, masks = item    # imgs: [B, C, H, W], masks: [B, H, W]
-        # B, C, H, W = imgs.shape
 
-        # K = masks.max().item() + 1
-        # one_hot = F.one_hot(masks, num_classes=K).permute(0, 3, 1, 2).float()  # [B, K, H, W]
-        # objects = imgs.unsqueeze(1) * one_hot.unsqueeze(2)   # [B, K, C, H, W]
         objects = []
         for k in range(self.obj_num):
             mask_k = (masks == k).unsqueeze(1)    # [B,1,H,W]
             obj_k = imgs * mask_k                 # [B,C,H,W]
             objects.append(obj_k.unsqueeze(1))    # keep slot dim
         objects = torch.cat(objects, dim=1)       # [B, obj_num, C, H, W]
-
-        # Enforce fixed number of objects
-        # if K < self.obj_num:
-        #     pad = torch.zeros(B, self.obj_num - K, C, H, W, device=imgs.device, dtype=imgs.dtype)
-        #     objects = torch.cat([objects, pad], dim=1) 
-        # elif K > self.obj_num:
-        #     objects = objects[:, :self.obj_num]
 
         return objects  # [B, obj_num, C, H, W]
 
@@ -44,17 +32,7 @@ class ObjectDecoder(nn.Module):
             recon += objects[:,k] * (masks == k).unsqueeze(1).float()
         return recon
 
-    # def forward(self, objects):
-    #     # objects: [B, obj_num, C, H, W]
-    #     # assume background is slot 0
-    #     background = objects[:, 0]             # [B, C, H, W]
-    #     obj_slots = objects[:, 1:]
-
-    #     recon = obj_slots.sum(dim=1) + background
-    #     return recon
-    #     # return torch.clamp(recon, 0, 1)        # [B, C, H, W]
-
-
+'''
 class SlotEncoder(nn.Module):
     def __init__(self, in_ch=3, d_model=128):
         super().__init__()
@@ -121,3 +99,4 @@ class ObjectAutoencoder(nn.Module):
         frame_recon = self.object_decoder((slots_recon, segmap))      # [B, C, H, W]
 
         return frame_recon, slots, slots_recon
+'''
