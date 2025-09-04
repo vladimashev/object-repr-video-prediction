@@ -1,28 +1,41 @@
 import torch.nn as nn
-from models.patchifier import Patchifier
-from torch import Tensor
-# (input - kernel_size + 2*padding) / stride + 1
+from models.encoder import ObjectCNNEncoder, SlotTransformerEncoder
+from models.decoder import SlotTransformerDecoder
+from models.object_composer import ObjectComposer, ObjectSlicer
 
-
-class ImageAutoencoder(nn.Module):
-    def __init__(self, encoder: nn.Module, decoder: nn.Module, patch_size: int):
+class MaskedObjectTransformer(nn.Module):
+    def __init__(self, obj_num=10, embed_dim=256, img_size=64, patch_size=8,
+                 enc_depth=3, dec_depth=3, nhead=8, mlp_ratio=4.0):
         super().__init__()
-        self.encoder = encoder
-        self.decoder = decoder
+        self.obj_num = obj_num
+        self.img_size = img_size
         self.patch_size = patch_size
+        self.encoder_cnn = ObjectCNNEncoder(embed_dim=embed_dim)
+        self.slot_encoder = SlotTransformerEncoder(embed_dim=embed_dim, depth=enc_depth, nhead=nhead, mlp_ratio=mlp_ratio, num_slots=obj_num)
+        self.slot_decoder = SlotTransformerDecoder(embed_dim=embed_dim, depth=dec_depth, nhead=nhead, mlp_ratio=mlp_ratio, img_size=img_size, patch_size=patch_size)
+        self.slicer = ObjectSlicer(obj_num=obj_num)
+        self.composer = ObjectComposer()
 
-    def forward(self,  x: Tensor)-> Tensor:  # x is of shape [B, C, H, W]
-        x = x.unsqueeze(1) # x is of shape [B, T, C, H, W]
-        B, T, C, H, W = x.shape
-        
-        z = self.encoder(x) # (B, T, num_patches, embed_dim)
-        recon = self.decoder(z) # first (B, T, num_patches, patch_dim) and then it returns (B, T, C, H, W)
+    def forward(self, item):
+        imgs, masks = item
+        # imgs: [B,3,H,W], masks: [B,H,W]
+        B = imgs.size(0)
+        objs = self.slicer(imgs, masks)  # [Batch_size,K_objects,3,Height,Width]
+        B,K,C,H,W = objs.shape
 
-        # nH, nW = H // self.patch_size, W // self.patch_size
-        # # (B, T, num_patches, patch_dim) -> (B,T,nH,nW,C,p,p) -> (B,T,C,H,W)
-        # recon = recon.view(B, T, nH, nW, C, self.patch_size, self.patch_size).permute(0,1,4,2,5,3,6).contiguous()
-        # recon = recon.view(B, T, C, H, W)
+        objs_flat = objs.view(B*K, C, H, W)
+        z = self.encoder_cnn(objs_flat)          # [B*K, D]
+        z_slots = z.view(B, K, -1)               # [B,K,D]
 
-        # remove T, because we are working with single image in this case
-        recon = recon.squeeze(1)
-        return recon
+        # transformer across slots
+        z_slots_refined = self.slot_encoder(z_slots)  # [B,K,D]
+
+        # prepare for decoder
+        mem = z_slots_refined.view(B*K, 1, -1)        # [B*K,1,D]
+        # use transformer decoder with learned spatial queries
+        obj_imgs = self.slot_decoder(mem)             # [B*K,3,H,W]
+        obj_imgs = obj_imgs.view(B, K, 3, H, W)
+
+        recon = self.composer(obj_imgs, masks)
+
+        return z_slots_refined, recon, obj_imgs

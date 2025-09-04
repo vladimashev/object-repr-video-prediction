@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 import torchvision.transforms.functional as F
+from torch.nn.functional import interpolate
 from torchvision.transforms import RandomHorizontalFlip, RandomVerticalFlip, RandomRotation, ColorJitter, Resize, InterpolationMode
 
 class FrameDataset(Dataset):
@@ -35,25 +36,41 @@ class FrameDataset(Dataset):
         mask_data = torch.load(mask_path, map_location='cpu')
         img_mask = mask_data["masks"][int(frame_id)]
 
+        # resize mask to match image transform
+        img_tensor = self.transform(img)
+        mask_tensor = torch.from_numpy(np.array(img_mask)).long()
+        mask_tensor = interpolate(mask_tensor.unsqueeze(0).unsqueeze(0).float(),
+                                    size=img_tensor.shape[1:], mode='nearest')[0,0].long()
+
         return {
-            "img": self.transform(img),
-            "mask": img_mask
+            "img": img_tensor,
+            "mask": mask_tensor,
+            "video_id": int(video_id),
+            "frame_id": int(frame_id)
         }
 
 class ImageDataset(FrameDataset):
     """ Full frame dataset """
-    # TODO patched encoding
     def __init__(self, image_dir, transform):
         super().__init__(image_dir, transform)
-        self.image_dir = image_dir
-        self.transform = transform
-        self.paths = []
         self._load_data()
 
     def __getitem__(self, idx):
         item = super().__getitem__(idx)
         
         return item["img"]
+
+class MaskDataset(FrameDataset):
+    """ Masked frame dataset.
+        Returns (img, mask) tuples. """
+    def __init__(self, image_dir, transform):
+        super().__init__(image_dir, transform)
+        self._load_data()
+
+    def __getitem__(self, idx):
+        item = super().__getitem__(idx)
+        
+        return item["img"], item["mask"]
 
 class SynchronizedTransform:
     def __init__(self, transform):

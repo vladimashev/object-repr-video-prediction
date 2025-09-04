@@ -2,18 +2,22 @@ from datetime import datetime
 import os
 import numpy as np
 import torch
-from tqdm import tqdm
 import torchvision
+from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 import csv
 
 from save_load import save_model
+from utils.move_to_device import move_to_device
+
 
 GET_DEFAULT_OPTIMIZER = lambda m: torch.optim.Adam(m.parameters(), lr=1e-3)
 DEFAULT_CRITERION = torch.nn.MSELoss()
 
 class Trainer:
-    def __init__(self, model, evaluate, optimizer=None, criterion=None, scheduler=None):
+    def __init__(self, model, evaluate,
+                 optimizer=None, criterion=None, scheduler=None,
+                 experiment_name: str = 'model'):
         """ Initialzer """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.optimizer = optimizer if optimizer else GET_DEFAULT_OPTIMIZER(model)
@@ -30,14 +34,14 @@ class Trainer:
         self.best_epoch = 0
         self.best_loss = 1e10 # best mean loss
 
-        self._setup_experiment('ConvAE')
+        self._setup_experiment(experiment_name)
 
         return
 
-    def _setup_experiment(self, experiment_name: str = 'model'):
+    def _setup_experiment(self, experiment_name):
         """ Sets up folders for experiments """
         save_root = 'experiments'
-        timestamp = datetime.now().strftime("%H-%M_%d-%m-%Y")
+        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
         exp_dir = os.path.join(save_root, f"{timestamp}_{experiment_name}")
         os.makedirs(exp_dir, exist_ok=True)
         # tensorboard folder
@@ -59,6 +63,9 @@ class Trainer:
         self.file_logs = os.path.join(dir_logs, 'logs.txt') # console output saves
         logs_exists = os.path.isfile(self.file_logs)
         if not logs_exists: open(self.file_logs, "x")
+        
+        with open(os.path.join(dir_logs, 'model_architecture.txt'), "w") as f:
+            print(self.model, file=f)
 
         return
         
@@ -111,7 +118,8 @@ class Trainer:
             mean_loss = .0
 
             for batch in train_loader:
-                batch = batch.to(self.device)
+                batch = move_to_device(batch, self.device)
+                
                 loss_item = self.train_one_step(batch)
                 loss_list.append(loss_item)
             
@@ -140,8 +148,10 @@ class Trainer:
                         self.best_loss = mean_loss
                         self.best_epoch = epoch
                 
+                
+                csv_headers = ["iter", "batch_size", "epoch", "loss", "mean_loss"]
                 # EVALUATION STEP
-                if (iter_ % EVAL_FREQUENCY == 0):
+                if (iter_ % EVAL_FREQUENCY == 0 and self.evaluate is not None):
                     # evaluation metrics
                     eval_metrics = self.evaluate(self.model, val_loader, self.device)
                     self.model.train()
@@ -149,7 +159,6 @@ class Trainer:
                     assert isinstance(eval_metrics, dict), "Eval metrics must be of dict type for CSV logging."
                     eval_metric_names = eval_metrics.keys()
 
-                    csv_headers = ["iter", "batch_size", "epoch", "loss", "mean_loss"]
                     csv_headers += eval_metric_names
                     metrics = {**train_metrics, **eval_metrics}
                     self._log(metrics)
@@ -176,7 +185,7 @@ class Trainer:
 
                 # SAVE SNAPSHOT
                 if (iter_ > 0) and (iter_ % SAVE_FREQUENCY == 0):
-                    finished_epoch = iter_+1 // total_batches
+                    finished_epoch = (iter_+1) // total_batches
                     save_model(self.model, self.optimizer, self.scheduler,
                                stats={ "epoch": finished_epoch, "iter_": iter_+1 },
                                save_path=self.dir_checkpoints,
