@@ -60,40 +60,33 @@ class ViTPatchDecoder(nn.Module):
         
         return out
 
-class ObjectTransformerDecoder(nn.Module):
-    def __init__(self, obj_num, C, H, W, embed_dim, attn_dim, num_heads, mlp_size, num_tf_layers):
+class SlotTransformerDecoder(nn.Module):
+    """ Decodes each slot embedding into an object image """
+    def __init__(self, embed_dim=256, depth=3, nhead=8,
+                 mlp_ratio=4.0, img_size=64, patch_size=8):
         super().__init__()
-        self.obj_num = obj_num
-        self.slot_dim = C * H * W
-        self.C = C
-        self.H = H
-        self.W = W
+        assert img_size % patch_size == 0
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.grid = img_size // patch_size
+        self.num_patches = self.grid * self.grid
+        self.patch_dim = 3 * patch_size * patch_size
 
-        self.input_norm = nn.LayerNorm(embed_dim)
-        self.pos_emb = PositionalEncoding(embed_dim, obj_num)
+        self.queries = nn.Parameter(torch.randn(1, self.num_patches, embed_dim) * 0.02)
+        decoder_layer = nn.TransformerDecoderLayer(d_model=embed_dim, nhead=nhead, dim_feedforward=int(embed_dim*mlp_ratio), batch_first=True)
+        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=depth)
+        # head to predict raw patch pixels
+        self.head = nn.Linear(embed_dim, self.patch_dim)
 
-        blocks = [
-            TransformerBlock(
-                token_dim=embed_dim,
-                attn_dim=attn_dim,
-                num_heads=num_heads,
-                mlp_size=mlp_size
-            )
-            for _ in range(num_tf_layers)
-        ]
-        self.transformer_blocks = nn.Sequential(*blocks)
-
-        self.to_object = nn.Linear(embed_dim, self.slot_dim)
-
-    def forward(self, tokens):
-        """
-        tokens: [B, O, embed_dim]
-        returns: [B, O, C, H, W] object reconstructions
-        """
-        B, O, _ = tokens.shape
-        tokens = self.input_norm(tokens)
-        tokens = self.pos_emb(tokens)
-        tokens = self.transformer_blocks(tokens)   # [B, O, embed_dim]
-        out = self.to_object(tokens)               # [B, O, slot_dim]
-        out = out.view(B, O, self.C, self.H, self.W)             # [B, O, C, H, W]
-        return out
+    def forward(self, slot_memory):
+        # slot_memory: [B * num_slots, 1, D]
+        Bk = slot_memory.size(0)
+        q = self.queries.expand(Bk, -1, -1)  # [B*K, num_patches, D]
+        # decoder expects memory: [B*K, M, D], here M=1
+        out = self.decoder(tgt=q, memory=slot_memory)  # [B*K, num_patches, D]
+        patches = self.head(out)  # [B*K, num_patches, patch_dim]
+        
+        patches = patches.view(Bk, self.grid, self.grid, 3, self.patch_size, self.patch_size)
+        patches = patches.permute(0,3,1,4,2,5).contiguous()  # [B*K,3,grid,ps,grid,ps]
+        obj_imgs = patches.view(Bk, 3, self.img_size, self.img_size)
+        return obj_imgs

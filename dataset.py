@@ -44,7 +44,9 @@ class FrameDataset(Dataset):
 
         return {
             "img": img_tensor,
-            "mask": mask_tensor
+            "mask": mask_tensor,
+            "video_id": int(video_id),
+            "frame_id": int(frame_id)
         }
 
 class ImageDataset(FrameDataset):
@@ -59,7 +61,8 @@ class ImageDataset(FrameDataset):
         return item["img"]
 
 class MaskDataset(FrameDataset):
-    """ Masked frame dataset """
+    """ Masked frame dataset.
+        Returns (img, mask) tuples. """
     def __init__(self, image_dir, transform):
         super().__init__(image_dir, transform)
         self._load_data()

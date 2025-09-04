@@ -90,7 +90,6 @@ class Trainer:
         self.optimizer.zero_grad()
         
         outputs = self.model(inputs)
-        # print(outputs.mean(), inputs[0].mean())
         loss = self.criterion(outputs, inputs)
         loss.backward()
         self.optimizer.step()

@@ -47,60 +47,39 @@ class ViTPatchEncoder(nn.Module):
         out = tokens.view(B, T, -1, embed_dim)   # (B, T, num_patches, embed_dim)
         return out
 
-class ObjectTransformerEncoder(nn.Module):
-    def __init__(self, obj_num, C, H, W, embed_dim, attn_dim, num_heads, mlp_size, num_tf_layers):
+class ObjectCNNEncoder(nn.Module):
+    """ Encodes a masked object image (3x64x64) into a single vector """
+    def __init__(self, embed_dim=256):
         super().__init__()
-        self.obj_num = obj_num
-        self.slot_dim = C * H * W   # flattened object image
-        self.projection = nn.Sequential(
-            nn.LayerNorm(self.slot_dim),
-            nn.Linear(self.slot_dim, embed_dim)
+        self.conv = nn.Sequential(
+            nn.Conv2d(3, 32, 4, 2, 1),  # 32x32
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 4, 2, 1),  # 16x16
+            nn.ReLU(),
+            nn.Conv2d(64, 128, 4, 2, 1), # 8x8
+            nn.ReLU(),
+            nn.Conv2d(128, 256, 4, 2, 1), # 4x4
+            nn.ReLU(),
         )
-        self.pos_emb = PositionalEncoding(embed_dim, obj_num)
+        self.fc = nn.Linear(256*4*4, embed_dim)
 
-        blocks = [
-            TransformerBlock(
-                token_dim=embed_dim,
-                attn_dim=attn_dim,
-                num_heads=num_heads,
-                mlp_size=mlp_size
-            )
-            for _ in range(num_tf_layers)
-        ]
-        self.transformer_blocks = nn.Sequential(*blocks)
+    def forward(self, x):
+        feat = self.conv(x)
+        z = self.fc(feat.view(feat.size(0), -1))
+        return z
 
-    def forward(self, objects):
-        """
-        objects: [B, O, C, H, W] (from ObjectEncoder)
-        """
-        B, O, C, H, W = objects.shape
-        tokens = objects.view(B, O, -1)          # flatten object slots -> [B, O, slot_dim]
-        tokens = self.projection(tokens)         # [B, O, embed_dim]
-        tokens = self.pos_emb(tokens)
-        out = self.transformer_blocks(tokens)    # [B, O, embed_dim]
-        return out
-
-
-'''
-class ConvPatchEncoder(nn.Module):
-    def __init__(self, patch_size):
+class SlotTransformerEncoder(nn.Module):
+    """ Transformer across object slots (self-attention among slot embeddings) """
+    def __init__(self, embed_dim=256, depth=3, nhead=8, mlp_ratio=4.0, num_slots=10):
         super().__init__()
-        self.patch_size = patch_size
-        self.encoder = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=64, kernel_size=4, stride=2, padding=1),   # 64x64 → 32x32
-            nn.ReLU(),
-            nn.Conv2d(64, 128, 4, 2, 1), # 32x32 → 16x16
-            nn.ReLU(),
-            nn.Conv2d(128, 256, 4, 2, 1),# 16x16 → 8x8
-            nn.ReLU(),
-            nn.Conv2d(256, 512, 4, 2, 1),# 8x8 → 4x4
-            nn.ReLU()
-        )
+        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead, dim_feedforward=int(embed_dim*mlp_ratio), batch_first=True)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=depth)
+        # optional learnable slot positional embeddings (helps the transformer distinguish slots)
+        self.slot_pos = nn.Parameter(torch.randn(1, num_slots, embed_dim) * 0.02)
 
-    def forward(self, patches):
-        # patches: (B, L, patch_dim) -> (B*L, 3, p, p)
-        B, L, _ = patches.shape
-        patches = patches.view(B * L, 3, self.patch_size, self.patch_size)
-        out = self.encoder(patches)
-        return out
-'''
+    def forward(self, slot_embeddings):
+        # slot_embeddings: [B, K, D]
+        x = slot_embeddings + self.slot_pos[:, :slot_embeddings.size(1), :]
+        x = self.encoder(x)
+        return x  # [B, K, D]
+    
