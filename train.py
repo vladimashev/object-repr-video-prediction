@@ -197,6 +197,14 @@ class Trainer:
 
         print(f"Training completed")
 
+        # save very last state
+        finished_epoch = (iter_) // total_batches
+        save_model(self.model, self.optimizer, self.scheduler,
+                    stats={ "epoch": finished_epoch, "iter_": iter_ },
+                    save_path=self.dir_checkpoints,
+                    model_name=f"epoch_{finished_epoch:03d}_iter_{iter_:05d}")
+        
+        # save the best model
         torch.save({
             'model_state_dict': self.best_model,
             'optimizer_state_dict': self.best_optimizer,
