@@ -7,7 +7,7 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 import csv
 
-from save_load import save_model
+from save_load import save_model as save_model_default
 from utils.move_to_device import move_to_device
 
 
@@ -17,8 +17,10 @@ DEFAULT_CRITERION = torch.nn.MSELoss()
 class Trainer:
     def __init__(self, model, evaluate,
                  optimizer=None, criterion=None, scheduler=None,
-                 experiment_name: str = 'model'):
+                 experiment_name: str = 'model',
+                 save_model = save_model_default):
         """ Initialzer """
+        self.save_model = save_model
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.optimizer = optimizer if optimizer else GET_DEFAULT_OPTIMIZER(model)
         self.criterion = criterion if criterion else DEFAULT_CRITERION
@@ -186,7 +188,7 @@ class Trainer:
                 # SAVE SNAPSHOT
                 if (iter_ > 0) and (iter_ % SAVE_FREQUENCY == 0):
                     finished_epoch = (iter_+1) // total_batches
-                    save_model(self.model, self.optimizer, self.scheduler,
+                    self.save_model(self.model, self.optimizer, self.scheduler,
                                stats={ "epoch": finished_epoch, "iter_": iter_+1 },
                                save_path=self.dir_checkpoints,
                                model_name=f"epoch_{finished_epoch:03d}_iter_{iter_+1:05d}")
@@ -199,17 +201,17 @@ class Trainer:
 
         # save very last state
         finished_epoch = (iter_) // total_batches
-        save_model(self.model, self.optimizer, self.scheduler,
+        self.save_model(self.model, self.optimizer, self.scheduler,
                     stats={ "epoch": finished_epoch, "iter_": iter_ },
                     save_path=self.dir_checkpoints,
                     model_name=f"epoch_{finished_epoch:03d}_iter_{iter_:05d}")
         
-        # save the best model
-        torch.save({
-            'model_state_dict': self.best_model,
-            'optimizer_state_dict': self.best_optimizer,
-            'scheduler_state_dict': self.best_scheduler,
-            'stats': { "epoch": self.best_epoch }
-        }, f"{self.dir_checkpoints}/best_model_{self.best_epoch:03d}.pth")
+        # save the best model condition
+        # torch.save({
+        #     'model_state_dict': self.best_model,
+        #     'optimizer_state_dict': self.best_optimizer,
+        #     'scheduler_state_dict': self.best_scheduler,
+        #     'stats': { "epoch": self.best_epoch }
+        # }, f"{self.dir_checkpoints}/best_model_{self.best_epoch:03d}.pth")
 
         return

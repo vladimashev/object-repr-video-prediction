@@ -61,9 +61,10 @@ class ViTPatchDecoder(nn.Module):
         return out
 
 class SlotTransformerDecoder(nn.Module):
-    def __init__(self, embed_dim=256, depth=3, nhead=8, mlp_ratio=4.0, img_size=64, patch_size=8):
+    def __init__(self, obj_num = 10, embed_dim=256, depth=3, nhead=8, mlp_ratio=4.0, img_size=64, patch_size=8):
         super().__init__()
         assert img_size % patch_size == 0
+        self.obj_num = obj_num
         self.img_size = img_size
         self.patch_size = patch_size
         self.grid = img_size // patch_size
@@ -94,4 +95,13 @@ class SlotTransformerDecoder(nn.Module):
         obj_mask = mask_patches.view(Bk, 1, self.img_size, self.img_size)
         obj_mask = torch.sigmoid(obj_mask)
 
-        return obj_rgb, obj_mask
+        K = self.obj_num
+        B = Bk // K
+        H = self.img_size
+        W = self.img_size
+        obj_rgbs = obj_rgb.view(B,K,3,H,W)
+        obj_masks = obj_mask.view(B,K,1,H,W)
+        attn = obj_masks / (obj_masks.sum(dim=1, keepdim=True) + 1e-6)
+        recon = torch.sum(attn * obj_rgbs, dim=1)
+
+        return recon

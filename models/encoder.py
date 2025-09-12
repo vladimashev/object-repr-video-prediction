@@ -78,11 +78,30 @@ class SlotTransformerEncoder(nn.Module):
         super().__init__()
         encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead,
                                                    dim_feedforward=int(embed_dim*mlp_ratio), batch_first=True)
+        self.encoder_cnn = ObjectCNNEncoder(embed_dim=embed_dim)
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=depth)
         self.slot_pos = nn.Parameter(torch.randn(1, num_slots, embed_dim) * 0.02)
+        self.num_slots = num_slots
 
-    def forward(self, slot_embeddings):
-        x = slot_embeddings + self.slot_pos[:, :slot_embeddings.size(1), :]
-        x = self.encoder(x)
-        return x
+    def forward(self, item):
+        imgs, masks = item
+        
+        B = imgs.size(0)
+
+        objs = []
+        for k in range(self.num_slots):
+            mask_k = (masks == k).unsqueeze(1)
+            objs.append(imgs * mask_k.float())
+        objs = torch.stack(objs, dim=1)
+        B,K,C,H,W = objs.shape
+
+        z = self.encoder_cnn(objs.view(B*K,C,H,W))
+        slot_embeddings = z.view(B, K, -1)
+        
+        z_slots_refined = slot_embeddings + self.slot_pos[:, :slot_embeddings.size(1), :]
+        z_slots_refined = self.encoder(z_slots_refined)
+
+        mem = z_slots_refined.view(B*K, 1, -1)
+
+        return mem
     
