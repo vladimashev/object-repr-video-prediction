@@ -61,46 +61,38 @@ class ViTPatchDecoder(nn.Module):
         return out
 
 class SlotTransformerDecoder(nn.Module):
-    def __init__(self, obj_num = 10, embed_dim=256, depth=3, nhead=8, mlp_ratio=4.0, img_size=64, patch_size=8):
+    def __init__(self, obj_num = 10, embed_dim=256, img_size=64):
         super().__init__()
-        assert img_size % patch_size == 0
         self.obj_num = obj_num
         self.img_size = img_size
-        self.patch_size = patch_size
-        self.grid = img_size // patch_size
-        self.num_patches = self.grid * self.grid
-        self.patch_dim_rgb = 3 * patch_size * patch_size
-        self.patch_dim_mask = 1 * patch_size * patch_size
+        self.fc = nn.Linear(embed_dim, 128*8*8)
 
-        self.queries = nn.Parameter(torch.randn(1, self.num_patches, embed_dim) * 0.02)
-        decoder_layer = nn.TransformerDecoderLayer(d_model=embed_dim, nhead=nhead,
-                                                   dim_feedforward=int(embed_dim*mlp_ratio), batch_first=True)
-        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=depth)
-        self.rgb_head = nn.Linear(embed_dim, self.patch_dim_rgb)
-        self.mask_head = nn.Linear(embed_dim, self.patch_dim_mask)
+        self.deconv = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, 4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 16, 4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 4, 3, padding=1) # 3 RGB + 1 mask
+        )
 
-    def forward(self, slot_memory):
-        Bk = slot_memory.size(0)
-        q = self.queries.expand(Bk, -1, -1)
-        out = self.decoder(tgt=q, memory=slot_memory)
-        rgb_patches = self.rgb_head(out)
-        mask_patches = self.mask_head(out)
-
-        rgb_patches = rgb_patches.view(Bk, self.grid, self.grid, 3, self.patch_size, self.patch_size)
-        rgb_patches = rgb_patches.permute(0,3,1,4,2,5).contiguous()
-        obj_rgb = rgb_patches.view(Bk, 3, self.img_size, self.img_size)
-
-        mask_patches = mask_patches.view(Bk, self.grid, self.grid, 1, self.patch_size, self.patch_size)
-        mask_patches = mask_patches.permute(0,3,1,4,2,5).contiguous()
-        obj_mask = mask_patches.view(Bk, 1, self.img_size, self.img_size)
-        obj_mask = torch.sigmoid(obj_mask)
+    def forward(self, slots):
+        # slots: [B*K, D]
+        Bk = slots.size(0)
+        x = self.fc(slots)
+        x = x.view(Bk, 128, 8, 8)
+        out = self.deconv(x)
+        rgb = torch.sigmoid(out[:, :3])
+        mask = torch.sigmoid(out[:, 3:4])
 
         K = self.obj_num
         B = Bk // K
         H = self.img_size
         W = self.img_size
-        obj_rgbs = obj_rgb.view(B,K,3,H,W)
-        obj_masks = obj_mask.view(B,K,1,H,W)
+        obj_rgbs = rgb.view(B,K,3,H,W)
+        obj_masks = mask.view(B,K,1,H,W)
+
         attn = obj_masks / (obj_masks.sum(dim=1, keepdim=True) + 1e-6)
         recon = torch.sum(attn * obj_rgbs, dim=1)
 

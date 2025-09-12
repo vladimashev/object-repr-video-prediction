@@ -51,8 +51,6 @@ class ViTPatchEncoder(nn.Module):
 # Masked encoder
 # =====================
 
-DEFAULT_OBJECT_NUM = 10
-
 class ObjectCNNEncoder(nn.Module):
     def __init__(self, embed_dim=256):
         super().__init__()
@@ -74,7 +72,7 @@ class ObjectCNNEncoder(nn.Module):
         return z
 
 class SlotTransformerEncoder(nn.Module):
-    def __init__(self, embed_dim=256, depth=3, nhead=8, mlp_ratio=4.0, num_slots=DEFAULT_OBJECT_NUM):
+    def __init__(self, embed_dim=256, depth=3, nhead=8, mlp_ratio=4.0, num_slots=10):
         super().__init__()
         encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead,
                                                    dim_feedforward=int(embed_dim*mlp_ratio), batch_first=True)
@@ -98,10 +96,9 @@ class SlotTransformerEncoder(nn.Module):
         z = self.encoder_cnn(objs.view(B*K,C,H,W))
         slot_embeddings = z.view(B, K, -1)
         
-        z_slots_refined = slot_embeddings + self.slot_pos[:, :slot_embeddings.size(1), :]
-        z_slots_refined = self.encoder(z_slots_refined)
+        z_slots_refined = self.encoder(slot_embeddings)
 
-        mem = z_slots_refined.view(B*K, 1, -1)
+        mem = z_slots_refined.view(B*K, -1)
 
         return mem
     
