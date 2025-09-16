@@ -1,8 +1,21 @@
 import torch.nn as nn
 from models.encoder import ObjectCNNEncoder, SlotTransformerEncoder
 from models.decoder import SlotTransformerDecoder
-from models.object_composer import ObjectComposer, ObjectSlicer
+#from models.object_composer import ObjectComposer, ObjectSlicer
 
+
+class ImageAutoencoder(nn.Module):
+    def __init__(self, encoder, decoder):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, x):
+        x = x.unsqueeze(1)
+        z = self.encoder(x)
+        return self.decoder(z).squeeze(1)
+
+'''
 class MaskedObjectTransformer(nn.Module):
     def __init__(self, obj_num=10, embed_dim=256, img_size=64, patch_size=8,
                  enc_depth=3, dec_depth=3, nhead=8, mlp_ratio=4.0):
@@ -39,3 +52,4 @@ class MaskedObjectTransformer(nn.Module):
         recon = self.composer(obj_imgs, masks)
 
         return z_slots_refined, recon, obj_imgs
+'''

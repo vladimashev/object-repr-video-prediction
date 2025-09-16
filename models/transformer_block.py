@@ -18,13 +18,14 @@ class TransformerBlock(nn.Module):
         Hidden dimension of the MLP module
     """
 
-    def __init__(self, token_dim, attn_dim, num_heads, mlp_size):
+    def __init__(self, token_dim, attn_dim, num_heads, mlp_size, causal=False):
         """ Module initializer """
         super().__init__()
         self.token_dim = token_dim
         self.mlp_size = mlp_size
         self.attn_dim = attn_dim
         self.num_heads = num_heads
+        self.causal = causal
 
         # MHA
         self.ln_att = nn.LayerNorm(token_dim, eps=1e-6)
@@ -43,7 +44,7 @@ class TransformerBlock(nn.Module):
         return
 
 
-    def forward(self, inputs):
+    def forward(self, inputs, attn_mask=None):
         """
         Forward pass through transformer encoder block.
         We assume the more modern PreNorm design
@@ -52,7 +53,13 @@ class TransformerBlock(nn.Module):
 
         # Self-attention.
         x = self.ln_att(inputs)
-        x = self.attn(x)
+
+        attn_mask = None
+        if self.causal:
+            N = inputs.size(1)
+            attn_mask = torch.triu(torch.ones(N, N, device=inputs.device), diagonal=1).bool()
+        
+        x = self.attn(x, attn_mask=attn_mask)
         y = x + inputs
 
         # MLP

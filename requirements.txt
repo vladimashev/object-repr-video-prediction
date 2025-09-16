@@ -15,4 +15,6 @@ scikit_image
 
 tqdm
 
+pytorch-fvd
+
 networkx<3.0

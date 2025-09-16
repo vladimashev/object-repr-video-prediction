@@ -33,6 +33,7 @@ class ViTPatchEncoder(nn.Module):
         x:  (B, T, C, H, W)
         Returns: (B, T, num_patches, embed_dim)
         """
+
         B, T, _, _, _ = x.shape
         
         patches = self.patchifier(x)  # [B, T*num_patches, patch_dim]

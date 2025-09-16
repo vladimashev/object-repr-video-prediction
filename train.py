@@ -215,3 +215,101 @@ class Trainer:
         # }, f"{self.dir_checkpoints}/best_model_{self.best_epoch:03d}.pth")
 
         return
+
+
+class TrainerAR(Trainer):
+    """
+    Trainer для autoregressive VideoARTransformer
+    (teacher forcing: вход [x1..x9] -> loss на [ŷ6..ŷ10] vs [x6..x10])
+    """
+    def __init__(self, model, evaluate,
+                 optimizer=None, criterion=None, scheduler=None,
+                 experiment_name: str = 'ar_model',
+                 save_model=None):
+        super().__init__(model, evaluate, optimizer, criterion, scheduler,
+                         experiment_name, save_model if save_model else save_model_default)
+
+    def train_one_step(self, batch):
+        """
+        batch: (inputs, targets)
+          inputs  -> (B, 9, C, H, W)  (teacher-forced seq)
+          targets -> (B, 5, C, H, W)  (ground truth future)
+        """
+        self.model.train()
+        self.optimizer.zero_grad()
+
+        inputs, targets = batch
+        outputs = self.model(inputs)  # (B, 9, C, H, W) with predictions ŷ₂..ŷ₁₀
+
+        # берём последние 5 кадров из outputs (позиции [5..9] → предсказания 6..10)
+        preds_last5 = outputs[:, -5:]    # (B, 5, C, H, W)
+        targets_last5 = targets          # (B, 5, C, H, W)
+
+        loss = self.criterion(preds_last5, targets_last5)
+        loss.backward()
+        self.optimizer.step()
+
+        loss_item = loss.detach().cpu().item()
+        del outputs, preds_last5, targets_last5, loss
+
+        return loss_item
+
+    def _log_predictions(self, inputs, targets, outputs, step, tag="Train"):
+        """
+        Логгирование картинок в TensorBoard и в imgs/
+        """
+        B = inputs.size(0)
+        # берём только первый элемент в батче для логирования
+        inp_seq = inputs[0]    # (9, C, H, W)
+        tgt_seq = targets[0]   # (5, C, H, W)
+        out_seq = outputs[0, -5:]  # (5, C, H, W)
+
+        # соберём картинки рядом: входы | ground truth | предсказания
+        grid = torch.cat([
+            inp_seq,                          # 9 кадров
+            torch.zeros_like(inp_seq[:1]),    # разделитель
+            tgt_seq,                          # 5 GT
+            out_seq                           # 5 preds
+        ], dim=0)  # (N, C, H, W)
+
+        grid = torchvision.utils.make_grid(grid, nrow=7, normalize=True)
+        self.writer.add_image(f"Sequences/{tag}", grid, global_step=step)
+
+        torchvision.utils.save_image(
+            grid, os.path.join(self.dir_imgs, f"{tag.lower()}_{step:06d}.png")
+        )
+
+    def train(self, train_loader, val_loader, epochs=10, eval_freq=1000, save_freq=None):
+        iter_ = 0
+        total_batches = len(train_loader)
+        progress_bar = tqdm(total=epochs)
+
+        for epoch in range(epochs):
+            loss_list = []
+            mean_loss = .0
+
+            for batch in train_loader:
+                batch = move_to_device(batch, self.device)
+                inputs, targets = batch
+
+                loss_item = self.train_one_step(batch)
+                loss_list.append(loss_item)
+
+                progress_bar.set_description(f"Ep {epoch} Iter {iter_}: Loss={round(loss_item,5)})")
+                self.writer.add_scalar('Loss/Train', loss_item, global_step=iter_)
+
+                # логируем последовательности каждые 500 итераций
+                if iter_ % 500 == 0:
+                    with torch.no_grad():
+                        self.model.eval()
+                        outputs = self.model(inputs)
+                        self._log_predictions(inputs, targets, outputs, step=iter_, tag="Train")
+                        self.model.train()
+
+                iter_ += 1
+
+            mean_loss = np.mean(loss_list)
+            if self.scheduler: 
+                self.scheduler.step(mean_loss)
+
+        print("Training completed")

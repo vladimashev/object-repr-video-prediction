@@ -33,7 +33,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.out_proj = nn.Linear(attn_dim, token_dim, bias=False)
         return
     
-    def attention(self, query, key, value):
+    def attention(self, query, key, value, attn_mask=None):
         """
         Computing self-attention
 
@@ -41,8 +41,13 @@ class MultiHeadSelfAttention(nn.Module):
         """
         scale = (query.shape[-1]) ** (-0.5)
 
+
         # similarity between each query and the keys
         similarity = torch.bmm(query, key.permute(0, 2, 1)) * scale  # ~(B, N, N)
+
+        if attn_mask is not None:
+            similarity = similarity.masked_fill(attn_mask.unsqueeze(0), float('-inf'))
+        
         attention = similarity.softmax(dim=-1)
         self.attention_map = attention
 
@@ -69,7 +74,7 @@ class MultiHeadSelfAttention(nn.Module):
         return y
 
 
-    def forward(self, x):
+    def forward(self, x, attn_mask=None):
         """ 
         Forward pass through Self-Attention module
         """
@@ -81,7 +86,7 @@ class MultiHeadSelfAttention(nn.Module):
         v = self.split_into_heads(v)
 
         # applying attention equation
-        vect = self.attention(query=q, key=k, value=v)
+        vect = self.attention(query=q, key=k, value=v, attn_mask=attn_mask)
 
         # rearranging heads and recovering shape:
         # (B * Nh, N, Dh) --> (B N, Nh, Dh) --> (B, N, D)

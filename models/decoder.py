@@ -39,8 +39,9 @@ class ViTPatchDecoder(nn.Module):
     def forward(self, x):
         """
         x: (B, T, num_patches, embed_dim)
-        -> (B, T, num_patches, patch_dim)
+        Returns: (B, T, C, H, W)
         """
+
         B, T, num_patches, embed_dim = x.shape
         tokens = self.input_norm(x)
 
