@@ -15,6 +15,7 @@ scikit_image
 
 tqdm
 
-pytorch-fvd
+pytorch_fid
+lpips
 
 networkx<3.0
