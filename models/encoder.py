@@ -83,13 +83,18 @@ class SlotTransformerEncoder(nn.Module):
         self.num_slots = num_slots
 
     def forward(self, item):
+        """
+        item: (imgs, masks)
+        imgs: [B, 3, H, W]
+        masks: [B, 1, H, W]
+        """
         imgs, masks = item
         
         B = imgs.size(0)
 
         objs = []
         for k in range(self.num_slots):
-            mask_k = (masks == k).unsqueeze(1)
+            mask_k = (masks == k)
             objs.append(imgs * mask_k.float())
         objs = torch.stack(objs, dim=1)
         B,K,C,H,W = objs.shape

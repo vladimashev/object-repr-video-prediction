@@ -6,71 +6,7 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 import torchvision.transforms.functional as F
-from torch.nn.functional import interpolate
-from torchvision.transforms import RandomHorizontalFlip, RandomVerticalFlip, RandomRotation, ColorJitter, Resize, InterpolationMode
-
-class FrameDataset(Dataset):
-    """ Abstract class for flattened mask/frame storage, no aggregation by sequence """
-    def __init__(self, image_dir, transform):
-        super().__init__()
-        self.image_dir = image_dir
-        self.transform = transform
-        self.paths = []
-        self._load_data()
-
-    def __len__(self):
-        return len(self.paths)
-
-    def _load_data(self):
-        for filepath in sorted(glob.glob(os.path.join(self.image_dir, "rgb_*.png"))):
-            self.paths.append(os.path.basename(filepath))
-            
-        return
-    
-    def __getitem__(self, idx):
-        img_path = self.paths[idx]
-        img = Image.open(os.path.join(self.image_dir, img_path)).convert("RGB")
-
-        _, video_id, frame_id = img_path.replace('.png', '').split('_')
-        mask_path = os.path.join(self.image_dir, f"mask_{video_id}.pt")
-        mask_data = torch.load(mask_path, map_location='cpu')
-        img_mask = mask_data["masks"][int(frame_id)]
-
-        # resize mask to match image transform
-        img_tensor = self.transform(img)
-        mask_tensor = torch.from_numpy(np.array(img_mask)).long()
-        mask_tensor = interpolate(mask_tensor.unsqueeze(0).unsqueeze(0).float(),
-                                    size=img_tensor.shape[1:], mode='nearest')[0,0].long()
-
-        return {
-            "img": img_tensor,
-            "mask": mask_tensor,
-            "video_id": int(video_id),
-            "frame_id": int(frame_id)
-        }
-
-class ImageDataset(FrameDataset):
-    """ Full frame dataset """
-    def __init__(self, image_dir, transform):
-        super().__init__(image_dir, transform)
-        self._load_data()
-
-    def __getitem__(self, idx):
-        item = super().__getitem__(idx)
-        
-        return item["img"]
-
-class MaskDataset(FrameDataset):
-    """ Masked frame dataset.
-        Returns (img, mask) tuples. """
-    def __init__(self, image_dir, transform):
-        super().__init__(image_dir, transform)
-        self._load_data()
-
-    def __getitem__(self, idx):
-        item = super().__getitem__(idx)
-        
-        return item["img"], item["mask"]
+from torchvision.transforms import RandomHorizontalFlip, RandomVerticalFlip, RandomRotation, ColorJitter, Resize, InterpolationMode, ToTensor
 
 class SynchronizedTransform:
     def __init__(self, transform):
@@ -228,4 +164,80 @@ class MOViC_Dataset(Dataset):
         img = Image.open(path).convert("RGB")
         img = np.array(img).astype(np.float32) / 255.0
         img = torch.from_numpy(img).permute(2, 0, 1) # to C,H,W
-        return img
+        return img    
+
+
+# ================================= FLATTENED DATASETS ================================= 
+
+DEFAULT_IMAGE_SIZE = (64, 64)
+
+class FrameDataset(Dataset):
+    """ Abstract class for flattened mask/frame storage, no aggregation by sequence """
+    def __init__(self, image_dir, transform, img_size = DEFAULT_IMAGE_SIZE):
+        super().__init__()
+        self.image_dir = image_dir
+        self.transform = SynchronizedTransform(transform)
+        self.resizer_rgb = Resize(
+                img_size,
+                interpolation=InterpolationMode.BILINEAR
+            )
+        self.resizer_mask = Resize(
+                img_size,
+                interpolation=InterpolationMode.NEAREST
+            )
+        self.paths_rgb = []
+        self._load_data()
+
+    def __len__(self):
+        return len(self.paths_rgb)
+
+    def _load_data(self):
+        for filepath in sorted(glob.glob(os.path.join(self.image_dir, "rgb_*.png"))):
+            self.paths_rgb.append(os.path.basename(filepath))
+            
+        return
+    
+    def __getitem__(self, idx):
+        img_path = self.paths_rgb[idx]
+        img = Image.open(os.path.join(self.image_dir, img_path)).convert("RGB")
+        img = self.resizer_rgb(img)
+        img = ToTensor()(img) # Tensor [3, H, W]
+
+        _, video_id, frame_id = img_path.replace('.png', '').split('_')
+        mask_path = os.path.join(self.image_dir, f"mask_{video_id}.pt")
+        mask_data = torch.load(mask_path, map_location='cpu')
+        img_mask = mask_data["masks"][int(frame_id)]
+        mask_tensor = torch.from_numpy(np.array(img_mask)).long().unsqueeze(0) # Tensor [1, H, W]
+        img_mask = self.resizer_mask(mask_tensor)
+
+        # transform synchronically
+        img_tensor, mask_tensor = self.transform(img, img_mask)
+
+        return {
+            "img": img_tensor,
+            "mask": mask_tensor,
+            "video_id": int(video_id),
+            "frame_id": int(frame_id)
+        }
+
+class ImageDataset(FrameDataset):
+    """ Full frame dataset """
+    def __init__(self, image_dir, transform, img_size = DEFAULT_IMAGE_SIZE):
+        super().__init__(image_dir, transform, img_size)
+
+    def __getitem__(self, idx):
+        item = super().__getitem__(idx)
+        
+        return item["img"]
+
+class MaskDataset(FrameDataset):
+    """ Masked frame dataset.
+        Returns (img, mask) tuples. """
+    def __init__(self, image_dir, transform, img_size = DEFAULT_IMAGE_SIZE):
+        super().__init__(image_dir, transform, img_size)
+
+    def __getitem__(self, idx):
+        item = super().__getitem__(idx)
+        
+        return item["img"], item["mask"]
+    

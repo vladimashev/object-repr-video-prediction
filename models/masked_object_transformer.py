@@ -14,6 +14,11 @@ class MaskedObjectTransformer(nn.Module):
         self.decoder = SlotTransformerDecoder(embed_dim=embed_dim, img_size=img_size, obj_num=obj_num)
 
     def forward(self, item):
+        """
+          item: (imgs, masks)
+          imgs: [B, 3, H, W]
+          masks: [B, 1, H, W]
+        """
         mem = self.encoder(item)
         recon = self.decoder(mem)
 
