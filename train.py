@@ -219,8 +219,8 @@ class Trainer:
 
 class TrainerAR(Trainer):
     """
-    Trainer для autoregressive VideoARTransformer
-    (teacher forcing: вход [x1..x9] -> loss на [ŷ6..ŷ10] vs [x6..x10])
+    Trainer for autoregressive VideoARTransformer (target -- rgb)
+    (teacher forcing)
     """
     def __init__(self, model, evaluate,
                  optimizer=None, criterion=None, scheduler=None,
@@ -231,19 +231,18 @@ class TrainerAR(Trainer):
 
     def train_one_step(self, batch):
         """
-        batch: (inputs, targets)
-          inputs  -> (B, 9, C, H, W)  (teacher-forced seq)
-          targets -> (B, 5, C, H, W)  (ground truth future)
+        batch 
+          ground truth  -> (B, 9, C, H, W)  (teacher-forced seq)
+          targets are the last 5 elements -> (B, 5, C, H, W) 
         """
         self.model.train()
         self.optimizer.zero_grad()
 
-        inputs, targets = batch
-        outputs = self.model(inputs)  # (B, 9, C, H, W) with predictions ŷ₂..ŷ₁₀
+        output = self.model(batch)  # (B, 9, C, H, W) with predictions ŷ₂..ŷ₁₀
 
-        # берём последние 5 кадров из outputs (позиции [5..9] → предсказания 6..10)
-        preds_last5 = outputs[:, -5:]    # (B, 5, C, H, W)
-        targets_last5 = targets          # (B, 5, C, H, W)
+        # take the last 5 frames from outputs (positions [5..9] → predictions for [6..10])
+        preds_last5 = outputs[:, -5:] # (B, 5, C, H, W)
+        targets_last5 = batch[:, -5:] # (B, 5, C, H, W)
 
         loss = self.criterion(preds_last5, targets_last5)
         loss.backward()

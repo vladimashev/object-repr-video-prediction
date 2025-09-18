@@ -10,9 +10,9 @@ def get_inception_model(device="cuda"):
     return model
 
 
-def get_activations(images, model, device="cuda", batch_size=BATCH_SIZE):
+def get_activations(images, model, device="cuda", batch_size):
     """
-    Extract InceptionV3 features. Accepts tensor of shape [N, 3, H, W].
+    Extract InceptionV3 features. Accepts tensor of shape [T, 3, H, W].
 
     Returns numpy array of [N, 2048].
     """
@@ -50,8 +50,8 @@ def compute_fvd_via_fid(real_frames, gen_frames, device="cuda"):
     real_frames = real_frames.reshape(B*T, C, H, W)
     gen_frames  = gen_frames.reshape(B*T, C, H, W)
 
-    act_r = get_activations(real_frames, model, device=device)
-    act_g = get_activations(gen_frames, model, device=device)
+    act_r = get_activations(real_frames, model, device=device, batch_size=B)
+    act_g = get_activations(gen_frames, model, device=device, batch_size=B)
 
     mu_r, sigma_r = np.mean(act_r, axis=0), np.cov(act_r, rowvar=False)
     mu_g, sigma_g = np.mean(act_g, axis=0), np.cov(act_g, rowvar=False)

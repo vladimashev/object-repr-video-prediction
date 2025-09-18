@@ -54,8 +54,7 @@ class TransformerBlock(nn.Module):
         # Self-attention.
         x = self.ln_att(inputs)
 
-        attn_mask = None
-        if self.causal:
+        if self.causal and attn_mask is None:
             N = inputs.size(1)
             attn_mask = torch.triu(torch.ones(N, N, device=inputs.device), diagonal=1).bool()
         

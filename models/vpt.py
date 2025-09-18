@@ -70,7 +70,6 @@ class VideoARTransformer(nn.Module):
         pred_feats = self.proj(tokens).view(B, T, Np, D)
 
         # (4) Decoder
-        with torch.no_grad():
-            preds = self.decoder(pred_feats)  # (B, T, C, H, W)
+        preds = self.decoder(pred_feats)  # (B, T, C, H, W)
 
         return preds
