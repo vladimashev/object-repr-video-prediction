@@ -62,7 +62,7 @@ class ViTPatchDecoder(nn.Module):
         return out
 
 class SlotTransformerDecoder(nn.Module):
-    def __init__(self, obj_num = 10, embed_dim=256, img_size=64):
+    def __init__(self, obj_num=10, embed_dim=256, img_size=64):
         super().__init__()
         self.obj_num = obj_num
         self.img_size = img_size
@@ -79,22 +79,21 @@ class SlotTransformerDecoder(nn.Module):
         )
 
     def forward(self, slots):
-        # slots: [B*K, D]
-        Bk = slots.size(0)
-        x = self.fc(slots)
-        x = x.view(Bk, 128, 8, 8)
+        """
+        slots: [B, T, K, D]
+        """
+        B, T, K, D = slots.shape
+
+        x = self.fc(slots.view(B*T*K, D)).view(B*T*K, 128, 8, 8)
         out = self.deconv(x)
         rgb = torch.sigmoid(out[:, :3])
-        mask = torch.sigmoid(out[:, 3:4])
+        obj_rgbs = rgb.view(B, T, K, 3, self.img_size, self.img_size)
 
-        K = self.obj_num
-        B = Bk // K
-        H = self.img_size
-        W = self.img_size
-        obj_rgbs = rgb.view(B,K,3,H,W)
-        obj_masks = mask.view(B,K,1,H,W)
+        mask_logits = out[:, 3:4]        # [B*T*K, 1, H, W]
+        # reshape to [B, T, K, H, W]
+        mask_logits = mask_logits.view(B, T, K, 1, self.img_size, self.img_size)
+        obj_masks = torch.softmax(mask_logits, dim=2)   # [B,T,K,1,H,W]
 
-        attn = obj_masks / (obj_masks.sum(dim=1, keepdim=True) + 1e-6)
-        recon = torch.sum(attn * obj_rgbs, dim=1)
+        recon = torch.sum(obj_masks * obj_rgbs, dim=2)   # [B,T,3,H,W]
 
         return recon

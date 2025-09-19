@@ -72,7 +72,7 @@ class ObjectCNNEncoder(nn.Module):
         z = self.fc(feat.view(feat.size(0), -1))
         return z
 
-class SlotTransformerEncoder(nn.Module):
+class SlotTransformerEncoder(nn.Module): 
     def __init__(self, embed_dim=256, depth=3, nhead=8, mlp_ratio=4.0, num_slots=10):
         super().__init__()
         encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead,
@@ -85,26 +85,33 @@ class SlotTransformerEncoder(nn.Module):
     def forward(self, item):
         """
         item: (imgs, masks)
-        imgs: [B, 3, H, W]
-        masks: [B, 1, H, W]
+        imgs:  [B, T, 3, H, W]
+        masks: [B, T, 1, H, W]
         """
         imgs, masks = item
-        
-        B = imgs.size(0)
+        B, T, C, H, W = imgs.shape
 
-        objs = []
-        for k in range(self.num_slots):
-            mask_k = (masks == k)
-            objs.append(imgs * mask_k.float())
-        objs = torch.stack(objs, dim=1)
-        B,K,C,H,W = objs.shape
+        objs_all = []
+        for t in range(T):
+            objs_t = []
+            for k in range(self.num_slots):
+                mask_k = (masks[:, t] == k)          # [B,1,H,W] boolean
+                objs_t.append(imgs[:, t] * mask_k.float())  # [B,C,H,W]
+            objs_t = torch.stack(objs_t, dim=1)     # [B,K,C,H,W]
+            objs_all.append(objs_t)
 
-        z = self.encoder_cnn(objs.view(B*K,C,H,W))
-        slot_embeddings = z.view(B, K, -1)
-        
-        z_slots_refined = self.encoder(slot_embeddings)
+        objs = torch.stack(objs_all, dim=1)         # [B,T,K,C,H,W]
+        B, T, K, C, H, W = objs.shape
 
-        mem = z_slots_refined.view(B*K, -1)
+        z = self.encoder_cnn(objs.view(B*T*K, C, H, W))  # [B*T*K, D]
+        z = z.view(B, T, K, -1)                          # [B,T,K,D]
 
-        return mem
+        z_refined = []
+        for t in range(T):
+            z_refined_t = self.encoder(z[:, t, :, :])    # [B,K,D]
+            z_refined.append(z_refined_t)
+        z_refined = torch.stack(z_refined, dim=1)        # [B,T,K,D]
+
+        return z_refined
+
     

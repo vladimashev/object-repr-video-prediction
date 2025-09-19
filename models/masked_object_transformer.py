@@ -16,8 +16,8 @@ class MaskedObjectTransformer(nn.Module):
     def forward(self, item):
         """
           item: (imgs, masks)
-          imgs: [B, 3, H, W]
-          masks: [B, 1, H, W]
+          imgs: [B, T, 3, H, W]
+          masks: [B, T, 1, H, W]
         """
         mem = self.encoder(item)
         recon = self.decoder(mem)

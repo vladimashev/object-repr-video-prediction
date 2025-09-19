@@ -41,7 +41,7 @@ class Trainer:
         return
 
     def _setup_experiment(self, experiment_name):
-        """ Sets up folders for experiments """
+        """ Sets up folders for experiments and logging """
         save_root = 'experiments'
         timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
         exp_dir = os.path.join(save_root, f"{timestamp}_{experiment_name}")
@@ -68,6 +68,9 @@ class Trainer:
         
         with open(os.path.join(dir_logs, 'model_architecture.txt'), "w") as f:
             print(self.model, file=f)
+        with open(os.path.join(dir_logs, 'optimizer_architecture.txt'), "w") as f:
+            print(self.optimizer, file=f)
+        self.file_params = os.path.join(dir_logs, 'hyperparameters.txt')
 
         return
         
@@ -80,7 +83,13 @@ class Trainer:
             
             writer.writerow(data)
     
+    def _log_params(self, text: str):
+        """ Save training hyperparameters information """
+        with open(self.file_params, 'a') as f:
+            f.write(text + '\n')
+    
     def _log(self, info):
+        """ Customly log to both console & file """
         print(info)
         with open(self.file_logs, 'a') as f:
             f.write(str(info) + '\n')
@@ -113,6 +122,11 @@ class Trainer:
         EVAL_FREQUENCY = eval_freq # how often to evaluate
         SAVE_FREQUENCY = save_freq if save_freq else total_batches - 1 # how often to take snapshots
         
+        def get_lr(optimizer):
+            for param_group in optimizer.param_groups:
+                return param_group['lr']
+        self._log_params(f"epochs={epochs}, batch_size={batch_size}, learning_rate={get_lr(self.optimizer)}, start_step={init_step}")
+        
         progress_bar = tqdm(total=epochs, initial=init_step)
 
         for epoch in range(epochs):
@@ -131,9 +145,9 @@ class Trainer:
                 # logging
                 self.writer.add_scalar(f'Loss/Train', loss_item, global_step=iter_)
 
+                # base (extendable) metrics to log on each iter
                 train_metrics = {
                     "iter": iter_,
-                    "batch_size": batch_size,
                     "epoch": epoch,
                     "loss": loss_item
                 }
@@ -151,9 +165,10 @@ class Trainer:
                         self.best_epoch = epoch
                 
                 
-                csv_headers = ["iter", "batch_size", "epoch", "loss", "mean_loss"]
-                # EVALUATION STEP
+                csv_headers = ["iter", "epoch", "loss", "mean_loss"]
+                # EVALUATION STEP (optional)
                 if (iter_ % EVAL_FREQUENCY == 0 and self.evaluate is not None):
+                    print("Performing evaluation...")
                     # evaluation metrics
                     eval_metrics = self.evaluate(self.model, val_loader, self.device)
                     self.model.train()
@@ -173,7 +188,7 @@ class Trainer:
                     if (iter_ > 0):
                         with torch.no_grad():
                             self.model.eval()
-                            recon = self.model(batch)
+                            recon = self.model(batch)[0]
                             grid = torchvision.utils.make_grid(recon.detach().cpu())
                             self.writer.add_image('Images/Train', grid, global_step=iter_)
                             torchvision.utils.save_image(grid, os.path.join(self.dir_imgs, f"imgs_{iter_}.png"))

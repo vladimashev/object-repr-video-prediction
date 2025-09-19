@@ -21,6 +21,11 @@ class SynchronizedTransform:
         do_vflip = False
         rotation_angle = 0
         jitter_tf = None
+        unsqueezed = False
+        
+        if frames.ndim != 4:
+            unsqueezed = True
+            frames, masks = frames.unsqueeze(0), masks.unsqueeze(0)
 
         # Find parameters
         for tf in self.transform.transforms:
@@ -76,7 +81,10 @@ class SynchronizedTransform:
                 # Update the frame
                 masks[idx] = mask
             
-        return frames, masks
+        if not unsqueezed:
+            return frames, masks
+        else:
+            return frames.squeeze(0), masks.squeeze(0)
 
 
 class MOViC_Dataset(Dataset):
@@ -237,7 +245,14 @@ class MaskDataset(FrameDataset):
         super().__init__(image_dir, transform, img_size)
 
     def __getitem__(self, idx):
+        """
+        Returns:
+            item: (img, mask)
+                img: [B, T, 3, H, W]
+                mask: [B, T, 1, H, W]
+        """
         item = super().__getitem__(idx)
         
-        return item["img"], item["mask"]
+        # return item["img"], item["mask"]
+        return item["img"].unsqueeze(0), item["mask"].unsqueeze(0) # add T dim
     
