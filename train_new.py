@@ -241,6 +241,16 @@ class TrainerAR(Trainer):
         batch 
           ground truth  -> (B, 9, C, H, W)  (teacher-forced seq)
           targets are the last 5 elements -> (B, 5, C, H, W) 
+
+          [1, 2, 3, 4, 5, 6, 7, 8, 9]
+          prds        [              ]
+          [_, _, _, _, 6, 7, 8, 9, 10]
+          2, 3, 4, 5
+
+
+          [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+          [1, 2, 3, 4, 
         """
         self.model.train()
         self.optimizer.zero_grad()
@@ -267,12 +277,13 @@ class TrainerAR(Trainer):
     
         preds = []
         cur_context = context.clone()
-        for t in range(15):
-            out = self.model(cur_context)             # [1, T=5, C, H, W]
-            next_frame = out[:, -1]                   # берём последний предсказанный кадр
-            preds.append(next_frame.unsqueeze(1))     # [1, 1, C, H, W]
-            # autoregressive update
-            cur_context = torch.cat([cur_context[:, 1:], next_frame.unsqueeze(1)], dim=1)
+        with torch.no_grad():
+            for t in range(15):
+                out = self.model(cur_context)             # [1, T=5, C, H, W]
+                next_frame = out[:, -1]                   # берём последний предсказанный кадр
+                preds.append(next_frame.unsqueeze(1))     # [1, 1, C, H, W]
+                # autoregressive update
+                cur_context = torch.cat([cur_context[:, 1:], next_frame.unsqueeze(1)], dim=1)
     
         preds = torch.cat(preds, dim=1)  # (1, 15, C, H, W)
     

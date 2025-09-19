@@ -49,7 +49,7 @@ def evaluate_autoencoder(model, dataloader, device):
 def evaluate_ar_transformer(model, dataloader, device, steps=15):
     model.eval()
 
-    criterion = torch.nn.MSELoss()
+    criterion = torch.nn.L1Loss()
     lpips_metric = LPIPS(net="alex").to(device)
 
     total_loss = 0.0
@@ -101,9 +101,8 @@ def evaluate_ar_transformer(model, dataloader, device, steps=15):
 
                 count += 1
 
-        preds_all.append(preds.cpu())
-        gts_all.append(future.cpu())
-
+    del preds, future, batch, context, cur_context, out, next_frame
+    torch.cuda.empty_cache()
 
     #TODO: add fvd
     

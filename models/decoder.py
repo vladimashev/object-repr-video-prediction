@@ -84,7 +84,7 @@ class SlotTransformerDecoder(nn.Module):
         x = self.fc(slots)
         x = x.view(Bk, 128, 8, 8)
         out = self.deconv(x)
-        rgb = torch.sigmoid(out[:, :3])
+        rgb = torch.sigmoid(out[:, :3]) #softmax
         mask = torch.sigmoid(out[:, 3:4])
 
         K = self.obj_num
@@ -95,6 +95,6 @@ class SlotTransformerDecoder(nn.Module):
         obj_masks = mask.view(B,K,1,H,W)
 
         attn = obj_masks / (obj_masks.sum(dim=1, keepdim=True) + 1e-6)
-        recon = torch.sum(attn * obj_rgbs, dim=1)
+        recon = torch.sum(attn * obj_rgbs, dim=1) #use softmax
 
         return recon

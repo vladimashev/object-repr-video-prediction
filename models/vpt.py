@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from models.patchifier import Patchifier
 from models.positional_encoding import PositionalEncoding
-from models.transformer_block import TransformerBlock
+from models.transformer_block import TransformerBlock, SpatialTemporalBlock
 
 
 class VideoARTransformer(nn.Module):
@@ -70,6 +70,65 @@ class VideoARTransformer(nn.Module):
         pred_feats = self.proj(tokens).view(B, T, Np, D)
 
         # (4) Decoder
+        preds = self.decoder(pred_feats)  # (B, T, C, H, W)
+
+        return preds
+
+
+class VideoFrameTransformer(nn.Module):
+    def __init__(self, encoder, decoder,
+                 H, W, patch_size,
+                 embed_dim, attn_dim, num_heads,
+                 mlp_size, num_tf_layers_ar):
+        super().__init__()
+
+        # --- Encoder ---
+        self.encoder = encoder
+        for p in self.encoder.parameters():
+            p.requires_grad = False
+
+        # --- Autoregressive Transformer (spatial+temporal) ---
+        self.ar_transformer = nn.ModuleList([
+            SpatialTemporalBlock(
+                token_dim=embed_dim,
+                attn_dim=attn_dim,
+                num_heads=num_heads,
+                mlp_size=mlp_size,
+                grid=(H // patch_size, W // patch_size),
+                max_len=(64 // patch_size) * (64 // patch_size) * 15, # max 15 frames of size (64, 64)
+                causal=True
+            )
+            for _ in range(num_tf_layers_ar)
+        ])
+        self.proj = nn.Linear(embed_dim, embed_dim)
+
+        # --- Decoder ---
+        self.decoder = decoder
+        for p in self.decoder.parameters():
+            p.requires_grad = False
+
+    def forward(self, x):
+        """
+        Args:
+            x: (B, T, C, H, W)
+        Returns:
+            preds: (B, T, C, H, W)
+
+    
+        """
+        # Encoder
+        with torch.no_grad():
+            tokens = self.encoder(x)  # (B, T, Np, D)
+
+        B, T, Np, D = tokens.shape
+
+        # Spatial+Temporal transformer blocks
+        for blk in self.ar_transformer:
+            tokens = blk(tokens)
+
+        pred_feats = self.proj(tokens)
+
+        # Decoder
         preds = self.decoder(pred_feats)  # (B, T, C, H, W)
 
         return preds

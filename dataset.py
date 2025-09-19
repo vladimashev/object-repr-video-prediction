@@ -21,6 +21,11 @@ class SynchronizedTransform:
         do_vflip = False
         rotation_angle = 0
         jitter_tf = None
+        unsqueezed = False
+        
+        if frames.ndim != 4:
+            unsqueezed = True
+            frames, masks = frames.unsqueeze(0), masks.unsqueeze(0)
 
         # Find parameters
         for tf in self.transform.transforms:
@@ -76,7 +81,10 @@ class SynchronizedTransform:
                 # Update the frame
                 masks[idx] = mask
             
-        return frames, masks
+        if not unsqueezed:
+            return frames, masks
+        else:
+            return frames.squeeze(0), masks.squeeze(0)
 
 
 class MOViC_Dataset(Dataset):
@@ -202,6 +210,7 @@ class FrameDataset(Dataset):
         img = Image.open(os.path.join(self.image_dir, img_path)).convert("RGB")
         img = self.resizer_rgb(img)
         img = ToTensor()(img) # Tensor [3, H, W]
+
 
         _, video_id, frame_id = img_path.replace('.png', '').split('_')
         mask_path = os.path.join(self.image_dir, f"mask_{video_id}.pt")
