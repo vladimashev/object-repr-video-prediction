@@ -79,22 +79,23 @@ class SlotTransformerDecoder(nn.Module):
         )
 
     def forward(self, slots):
-        # slots: [B*K, D]
-        Bk = slots.size(0)
-        x = self.fc(slots)
-        x = x.view(Bk, 128, 8, 8)
+        B, T, K, D = slots.shape
+        H, W = self.img_size, self.img_size
+        # print(f'deconv B={B}, T={T}, K={K}, D={D}')
+        x = self.fc(slots.view(B*T*K, D)).view(B*T*K, 128, 8, 8)
+
         out = self.deconv(x)
-        rgb = torch.sigmoid(out[:, :3]) #softmax
-        mask = torch.sigmoid(out[:, 3:4])
+        # print("DECONV out!", out.shape)
 
-        K = self.obj_num
-        B = Bk // K
-        H = self.img_size
-        W = self.img_size
-        obj_rgbs = rgb.view(B,K,3,H,W)
-        obj_masks = mask.view(B,K,1,H,W)
+        # RGB
+        rgb = torch.sigmoid(out[:, :3])   # [B*T*K, 3, H, W]
+        obj_rgbs = rgb.view(B, T, K, 3, H, W)
 
-        attn = obj_masks / (obj_masks.sum(dim=1, keepdim=True) + 1e-6)
-        recon = torch.sum(attn * obj_rgbs, dim=1) #use softmax
+        mask_logits = out[:, 3:4]
+        # reshape to [B, T, K, H, W]
+        mask_logits = mask_logits.view(B, T, K, 1, H, W)
+        obj_masks = torch.softmax(mask_logits, dim=2)   # [B,K,1,H,W]
+        
+        recon = torch.sum(obj_masks * obj_rgbs, dim=2)   # [B,T,3,H,W]
 
         return recon

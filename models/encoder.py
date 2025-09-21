@@ -79,32 +79,41 @@ class SlotTransformerEncoder(nn.Module):
                                                    dim_feedforward=int(embed_dim*mlp_ratio), batch_first=True)
         self.encoder_cnn = ObjectCNNEncoder(embed_dim=embed_dim)
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=depth)
-        self.slot_pos = nn.Parameter(torch.randn(1, num_slots, embed_dim) * 0.02)
         self.num_slots = num_slots
 
     def forward(self, item):
         """
         item: (imgs, masks)
-        imgs: [B, 3, H, W]
-        masks: [B, 1, H, W]
+        imgs: [B, T, 3, H, W]
+        masks: [B, T, 1, H, W]
         """
         imgs, masks = item
+        B, T, C, H, W = imgs.shape
+        K = self.num_slots
+
+        objs_all = []
+        for t in range(T):
+            objs_t = []
+            for k in range(K):
+                mask_k = (masks[:, t] == k)          # [B,1,H,W] boolean
+                objs_t.append(imgs[:, t] * mask_k.float())  # [B,C,H,W]
+            objs_t = torch.stack(objs_t, dim=1)     # [B,K,C,H,W]
+            objs_all.append(objs_t)
+        objs = torch.stack(objs_all, dim=1)         # [B,T,K,C,H,W]
+        # print('objs shape [B,T,K,C,H,W]', objs.shape)
+
+        z = self.encoder_cnn(objs.view(B*T*K,C,H,W))
+        slot_embeddings = z.view(B, T, K, -1)
+        # print('slot_embeddings [B,T,K,D]', slot_embeddings.shape)
         
-        B = imgs.size(0)
+        z_refined = []
+        for t in range(T):
+            z_refined_t = self.encoder(slot_embeddings[:, t, :, :])    # [B,K,D]
+            z_refined.append(z_refined_t)
+        z_refined = torch.stack(z_refined, dim=1)        # [B,T,K,D]
+        # print("z_refined [B,T,K,D]", z_refined.shape)
+        # z_slots_refined = self.encoder(slot_embeddings)
+        # mem = z_slots_refined.view(B*K, -1)
 
-        objs = []
-        for k in range(self.num_slots):
-            mask_k = (masks == k)
-            objs.append(imgs * mask_k.float())
-        objs = torch.stack(objs, dim=1)
-        B,K,C,H,W = objs.shape
-
-        z = self.encoder_cnn(objs.view(B*K,C,H,W))
-        slot_embeddings = z.view(B, K, -1)
-        
-        z_slots_refined = self.encoder(slot_embeddings)
-
-        mem = z_slots_refined.view(B*K, -1)
-
-        return mem
+        return z_refined
     
