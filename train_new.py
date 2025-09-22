@@ -239,23 +239,18 @@ class TrainerAR(Trainer):
     def train_one_step(self, inputs):
         """
         batch 
-          ground truth  -> (B, 9, C, H, W)  (teacher-forced seq)
+          input  -> (B, 9, C, H, W)  (teacher-forced)
           targets are the last 5 elements -> (B, 5, C, H, W) 
 
-          [1, 2, 3, 4, 5, 6, 7, 8, 9]
-          prds        [              ]
-          [_, _, _, _, 6, 7, 8, 9, 10]
-          2, 3, 4, 5
+          inputs              [1, 2, 3, 4, 5, 6, 7, 8, 9] 
+          model yields prds   [_, _, _, _, 5, 6, 7, 8, 9] for [6, 7, 8, 9, 10]
+          targets             [_, _, _, _, 6, 7, 8, 9, 10]
 
-
-          [1, 2, 3, 4, 5, 6, 7, 8, 9]
-
-          [1, 2, 3, 4, 
         """
         self.model.train()
         self.optimizer.zero_grad()
 
-        outputs = self.model(inputs)  # (B, 9, C, H, W) with predictions ŷ₂..ŷ₁₀
+        outputs = self.model(inputs[:, :-1, ...].contiguous())  # (B, 9, C, H, W) predictions for frames [6..10] at positions [5..9]
 
         # take the last 5 frames from outputs (positions [5..9] → predictions for [6..10])
         preds_last5 = outputs[:, -5:] # (B, 5, C, H, W)

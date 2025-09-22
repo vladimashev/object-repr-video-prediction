@@ -1,3 +1,6 @@
+# experiment outputs
+experiments/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
