@@ -4,21 +4,20 @@ import numpy as np
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from lpips import LPIPS
-
+import torch.nn.functional as F
 
 @torch.no_grad()
-def evaluate_autoencoder(model, dataloader, device='cuda', compute_fvd=True, lpips_net='alex'):
+def evaluate_autoencoder(model, dataloader, device='cuda', lpips_net='alex'):
     device = torch.device(device)
     model = model.to(device)
     model.eval()
-
-    mse_criterion = torch.nn.MSELoss()
 
     # LPIPS model (expects inputs in [-1,1])
     lpips_fn = LPIPS(net=lpips_net).to(device)
     lpips_fn.eval()
 
-    total_loss = 0.0
+    total_mse = 0.0
+    total_mae = 0.0
     total_ssim = 0.0
     total_psnr = 0.0
     total_lpips = 0.0
@@ -26,7 +25,7 @@ def evaluate_autoencoder(model, dataloader, device='cuda', compute_fvd=True, lpi
     total_frames = 0  # frames across all videos (B * T)
     total_batches = 0
 
-    # For FVD if requested
+    # For FVD
     real_sequences = []
     gen_sequences = []
 
@@ -40,9 +39,11 @@ def evaluate_autoencoder(model, dataloader, device='cuda', compute_fvd=True, lpi
         recon = model((imgs, masks))
         recon = recon.to(device)
 
-        # MSE loss over whole batch/time
-        loss = mse_criterion(recon, imgs)
-        total_loss += float(loss.item())
+        # MSE/MAE loss over whole batch/time
+        mse = F.mse_loss(recon, imgs)
+        mae = F.l1_loss(recon, imgs)
+        total_mse += float(mse.item())
+        total_mae += float(mae.item())
         total_batches += 1
 
         B, T, C, H, W = imgs.shape
@@ -96,9 +97,6 @@ def evaluate_autoencoder(model, dataloader, device='cuda', compute_fvd=True, lpi
                 y = recon_uint8[b, t].transpose(1, 2, 0)
 
                 ssim_val = ssim(x, y, data_range=255, channel_axis=-1)
-                # except TypeError:
-                #     # older skimage uses multichannel arg
-                #     ssim_val = ssim(x, y, data_range=255, multichannel=True)
                 psnr_val = psnr(x, y, data_range=255)
 
                 total_ssim += float(ssim_val)
@@ -113,13 +111,15 @@ def evaluate_autoencoder(model, dataloader, device='cuda', compute_fvd=True, lpi
         real_sequences.append(real_np)
         gen_sequences.append(gen_np)
 
-    avg_loss = total_loss / total_batches
+    avg_mse = total_mse / total_batches
+    avg_mae = total_mae / total_batches
     avg_ssim = total_ssim / max(1, total_frames)
     avg_psnr = total_psnr / max(1, total_frames)
     avg_lpips = total_lpips / max(1, total_frames)
 
     results = {
-        "Loss": avg_loss,
+        "MSE": avg_mse,
+        "MAE": avg_mae,
         "SSIM": avg_ssim,
         "PSNR": avg_psnr,
         "LPIPS": avg_lpips,
@@ -141,7 +141,7 @@ def evaluate_autoencoder(model, dataloader, device='cuda', compute_fvd=True, lpi
             fvd_value = None
             print(f"Warning: FVD computation failed: {e}")
 
-        results["FVD"] = float(fvd_value) if fvd_value is not None else 1
+        results["FVD"] = float(fvd_value) if fvd_value is not None else -1
 
     return results
 

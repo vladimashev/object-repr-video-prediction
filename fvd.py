@@ -48,10 +48,6 @@ class VideoEmbedder(torch.nn.Module):
     """
     Wrapper that produces a per-video embedding [B, feat_dim] from input
     frames [B, T, C, H, W].
-
-    By default this tries to load torchvision's r3d_18 pre-trained on kinetics.
-    If you have a true I3D implementation, replace the body of _build_default_model()
-    with your I3D loading and feature extraction (and make sure the input shape matches).
     """
 
     def __init__(self, device='cpu', pretrained=True):
@@ -181,8 +177,8 @@ def execute_default_fvd(real_frames, gen_frames, device="cuda"):
     """ Initializes with a default model, gets activations and computes FVD """
     embedder = VideoEmbedder(device=device, pretrained=True)
     batch_size = real_frames.shape[0]
-    real_acts = get_activations_from_frames(real_frames, embedder, batch_size=batch_size, device=device, target_resolution=(224,224))
-    gen_acts = get_activations_from_frames(gen_frames, embedder, batch_size=batch_size, device=device, target_resolution=(224,224))
+    real_acts = get_activations_from_frames(real_frames, embedder, batch_size=4, device=device, target_resolution=(224,224))
+    gen_acts = get_activations_from_frames(gen_frames, embedder, batch_size=4, device=device, target_resolution=(224,224))
 
     fvd_value = calculate_fvd(real_acts, gen_acts)
 

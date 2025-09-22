@@ -151,7 +151,8 @@ class Trainer:
                 }
 
                 # if last batch of the epoch, track averaged loss as well
-                if (epoch > 0 and ((iter_+1) // total_batches) > epoch):
+                is_last_batch = epoch > 0 and ((iter_+1) // total_batches) > epoch
+                if is_last_batch:
                     mean_loss = np.mean(loss_list)
                     train_metrics["mean_loss"] = mean_loss
                     # track the best configuration
@@ -165,7 +166,7 @@ class Trainer:
                 
                 csv_headers = ["iter", "epoch", "loss", "mean_loss"]
                 # EVALUATION STEP
-                if (iter_ % EVAL_FREQUENCY == 0 and self.evaluate is not None):
+                if ((iter_ % EVAL_FREQUENCY == 0 or is_last_batch) and self.evaluate is not None):
                     # evaluation metrics
                     eval_metrics = self.evaluate(self.model, val_loader, self.device)
                     self.model.train()
@@ -185,7 +186,9 @@ class Trainer:
                     if (iter_ > 0):
                         with torch.no_grad():
                             self.model.eval()
-                            recon = self.model(batch)[0]
+                            recon = self.model(batch)
+                            if recon.ndim == 5:
+                                recon = recon[:, 0] # take batch with T=1 for logging
                             grid = torchvision.utils.make_grid(recon.detach().cpu())
                             self.writer.add_image('Images/Train', grid, global_step=iter_)
                             torchvision.utils.save_image(grid, os.path.join(self.dir_imgs, f"imgs_{iter_}.png"))
