@@ -11,9 +11,8 @@ class ImageAutoencoder(nn.Module):
         self.decoder = decoder
 
     def forward(self, x):
-        x = x.unsqueeze(1)
         z = self.encoder(x)
-        return self.decoder(z).squeeze(1)
+        return self.decoder(z)
 
 '''
 class MaskedObjectTransformer(nn.Module):

@@ -24,7 +24,7 @@ def save_model(model, optimizer, scheduler = None, stats = {},
 
     torch.save({
         'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict() if optimizer else None,
         'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
         'stats': stats
     }, savepath)

@@ -217,7 +217,7 @@ class Trainer:
 
         # save very last state
         finished_epoch = (iter_) // total_batches
-        self.save_model(self.model, self.optimizer, self.scheduler,
+        self.save_model(self.model, None, self.scheduler,
                     stats={ "epoch": finished_epoch, "iter_": iter_ },
                     save_path=self.dir_checkpoints,
                     model_name=f"epoch_{finished_epoch:03d}_iter_{iter_:05d}")
