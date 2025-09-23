@@ -102,12 +102,18 @@ class SpatialTemporalBlock(nn.Module):
 
     @staticmethod
     def build_causal_mask(T: int, Np: int, device: torch.device):
-        """
-        Build causal mask for T axis
-        """
-        time_mask = torch.triu(torch.ones(T, T), diagonal=1).bool() # [T, T]
-        mask = time_mask.repeat_interleave(Np, dim=0).repeat_interleave(Np, dim=1) # [T*Np, T*Np], all patches can attent to one another
+        # time causal-mask [T, T]
+        time_mask = torch.triu(torch.ones(T, T), diagonal=1).bool()
+        # repeat Np times
+        mask = torch.block_diag(*([time_mask] * Np))
         return mask.to(device)
+    # def build_causal_mask(T: int, Np: int, device: torch.device):
+    #     """
+    #     Build causal mask for T axis
+    #     """
+    #     time_mask = torch.triu(torch.ones(T, T), diagonal=1).bool() # [T, T]
+    #     mask = time_mask.repeat_interleave(Np, dim=0).repeat_interleave(Np, dim=1) # [T*Np, T*Np], all patches can attent to one another
+    #     return mask.to(device)
 
     def forward(self, x):
         """
@@ -121,13 +127,13 @@ class SpatialTemporalBlock(nn.Module):
 
         # === Spatial Attention within each frame ===
         x_spatial = self.spatial_pe(x)
-        x_spatial = x_spatial.view(B * T, Np, D) # [B*T, Np, D]
+        x_spatial = x_spatial.reshape(B * T, Np, D) # [B*T, Np, D]
         xs = self.ln_spatial(x_spatial)
         xs = self.attn_spatial(xs)
         xs = self.dropout(xs)
         xs = xs + x_spatial
         xs = xs + self.mlp_spatial(self.ln_mlp_spatial(xs))
-        xs = xs.view(B, T * Np, D) # back to [B, T*Np, D]
+        xs = xs.reshape(B, T*Np, D) # [B, T*Np, D]
 
         # === Temporal Attention between frames ===
         mask = None
@@ -135,11 +141,13 @@ class SpatialTemporalBlock(nn.Module):
             mask = self.build_causal_mask(T, Np, x.device)
 
         xt = self.temporal_pe(xs)
+        xt = xt.reshape(B, T, Np, D).transpose(1, 2).reshape(B, Np * T, D)
         xt = self.ln_temporal(xt)
         xt = self.dropout(xt)
         xt = self.attn_temporal(xt, attn_mask=mask)
         xt = xt + xs
         xt = xt + self.mlp_temporal(self.ln_mlp_temporal(xt))
-        xt = xt.view(B, T, Np, D)
+
+        xt = xt.reshape(B, Np, T, D).transpose(1, 2)
 
         return xt

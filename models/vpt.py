@@ -117,8 +117,7 @@ class VideoFrameTransformer(nn.Module):
     
         """
         # Encoder
-        with torch.no_grad():
-            tokens = self.encoder(x)  # (B, T, Np, D)
+        tokens = self.encoder(x)  # (B, T, Np, D)
 
         B, T, Np, D = tokens.shape
 

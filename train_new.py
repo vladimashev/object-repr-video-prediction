@@ -317,3 +317,107 @@ class TrainerAR(Trainer):
 
         gif_path = os.path.join(self.dir_imgs, f"rollout_{iter_:06d}.gif")
         imageio.mimsave(gif_path, images, fps=5)
+
+
+class TrainerAutoRegressive(Trainer):
+    """
+    Trainer for autoregressive VideoARTransformer (target -- rgb)
+    """
+    def __init__(self, model, evaluate,
+                 optimizer=None, criterion=None, scheduler=None,
+                 experiment_name: str = 'ar_model',
+                 save_model=None):
+        super().__init__(model, evaluate, optimizer, criterion, scheduler,
+                         experiment_name, save_model if save_model else save_model_default)
+
+    def train_one_step(self, inputs):
+        """
+        batch 
+          input  -> (B, 9, C, H, W)
+          targets are the last 5 elements -> (B, 5, C, H, W) 
+
+          inputs              [1, 2, 3, 4, 5, 6, 7, 8, 9] 
+          model yields prds   [_, _, _, _, 5, 6, 7, 8, 9] for [6, 7, 8, 9, 10]
+          targets             [_, _, _, _, 6, 7, 8, 9, 10]
+
+        """
+        self.model.train()
+        self.optimizer.zero_grad()
+
+        context, future = inputs[:, :5], inputs[:, 5:]  # [B,5,..], [B,5,..]
+        steps = 5
+        preds = []
+        cur_context = context.detach().clone()
+        for t in range(steps):
+            out = self.model(cur_context)          # (B, T, C, H, W)
+            next_frame = out[:, -1]                # последний кадр
+            preds.append(next_frame.unsqueeze(1))  # (B, 1, C, H, W)
+        
+            # обновляем контекст (без градиентов)
+            cur_context = torch.cat(
+                [cur_context[:, 1:], next_frame.unsqueeze(1).detach()],
+                dim=1
+            )
+        
+        preds = torch.cat(preds, dim=1)  # (B, 5, C, H, W)
+        loss = self.criterion(preds, future)
+        loss.backward()
+        self.optimizer.step()
+
+        loss_item = loss.detach().cpu().item()
+        del preds, future, cur_context, loss
+
+        return loss_item
+
+    def _log_predictions(self, batch, iter_):
+        context = batch[0, :5].unsqueeze(0)   # (1, 5, C, H, W)
+        future  = batch[0, 5:].unsqueeze(0)   # (1, 15, C, H, W)
+        B, _, C, H, W = context.shape
+    
+        preds = []
+        cur_context = context.clone()
+        with torch.no_grad():
+            for t in range(15):
+                out = self.model(cur_context)             # [1, T=5, C, H, W]
+                next_frame = out[:, -1]                   # берём последний предсказанный кадр
+                preds.append(next_frame.unsqueeze(1))     # [1, 1, C, H, W]
+                # autoregressive update
+                cur_context = torch.cat([cur_context[:, 1:], next_frame.unsqueeze(1)], dim=1)
+    
+        preds = torch.cat(preds, dim=1)  # (1, 15, C, H, W)
+    
+        ctx_seq   = context[0]      # (5, C, H, W)
+        fut_seq   = future[0]       # (15, C, H, W)
+        pred_seq  = preds[0]        # (15, C, H, W)
+    
+        # Грид: входы | разделитель | GT | предсказания
+        grid = torch.cat([
+            ctx_seq,
+            torch.zeros_like(ctx_seq[:1]),   # разделитель
+            fut_seq,
+            pred_seq
+        ], dim=0)  # (N, C, H, W)
+    
+        grid = torchvision.utils.make_grid(grid, nrow=7, normalize=True)
+    
+        self.writer.add_image(f"Sequences/rollout", grid, global_step=iter_)
+        torchvision.utils.save_image(
+            grid, os.path.join(self.dir_imgs, f"rollout_{iter_:06d}.png")
+        )
+
+        # gif
+        scale = 4
+        seq_for_gif = torch.cat([ctx_seq, pred_seq], dim=0) 
+        seq_for_gif = (seq_for_gif.clamp(0,1) * 255).byte().cpu()  # [T, C, H, W]
+        seq_for_gif = seq_for_gif.permute(0, 2, 3, 1).numpy()      # [T, H, W, C]
+
+        images = []
+        for f in seq_for_gif:
+            img = Image.fromarray(f)
+            if scale != 1.0:
+                w, h = img.size
+                img = img.resize((int(w * scale), int(h * scale)), Image.NEAREST)
+            images.append(img)
+
+        gif_path = os.path.join(self.dir_imgs, f"rollout_{iter_:06d}.gif")
+        imageio.mimsave(gif_path, images, fps=5)
