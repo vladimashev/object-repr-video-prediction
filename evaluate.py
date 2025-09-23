@@ -30,13 +30,23 @@ def evaluate_autoencoder(model, dataloader, device='cuda', lpips_net='alex'):
     gen_sequences = []
 
     for batch in dataloader:
-        # dataloader yields (imgs, masks)
-        imgs, masks = batch[0], batch[1]
+        # dataloader yields (imgs, masks) or imgs
+        # (depending on dataset variant)
+        isList = isinstance(batch, (tuple, list))
+        if isList:
+            imgs, masks = batch[0], batch[1]
+            masks = masks.to(device)
+        else:
+            imgs = batch
 
         imgs = imgs.to(device)
-        masks = masks.to(device)
 
-        recon = model((imgs, masks))
+        if isList:
+            model_input = (imgs, masks)
+        else:
+            model_input = imgs
+
+        recon = model(model_input)
         recon = recon.to(device)
 
         # MSE/MAE loss over whole batch/time
@@ -45,7 +55,7 @@ def evaluate_autoencoder(model, dataloader, device='cuda', lpips_net='alex'):
         total_mse += float(mse.item())
         total_mae += float(mae.item())
         total_batches += 1
-
+        
         B, T, C, H, W = imgs.shape
 
         # skimage expects HxWxC in uint8
