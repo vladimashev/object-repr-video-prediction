@@ -237,7 +237,7 @@ class ImageDataset(FrameDataset):
     def __getitem__(self, idx):
         item = super().__getitem__(idx)
         
-        return item["img"]
+        return item["img"].unsqueeze(0) # add T dim
 
 class MaskDataset(FrameDataset):
     """ Masked frame dataset.
