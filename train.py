@@ -18,7 +18,8 @@ class Trainer:
     def __init__(self, model, evaluate,
                  optimizer=None, criterion=None, scheduler=None,
                  experiment_name: str = 'model',
-                 save_model = save_model_default):
+                 save_model = save_model_default,
+                 existing_path = None):
         """ Initialzer """
         self.save_model = save_model
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -36,14 +37,14 @@ class Trainer:
         self.best_epoch = 0
         self.best_loss = 1e10 # best mean loss
 
-        self._setup_experiment(experiment_name)
+        self._setup_experiment(experiment_name, existing_path)
 
         return
 
-    def _setup_experiment(self, experiment_name):
+    def _setup_experiment(self, experiment_name, existing_path):
         """ Sets up folders for experiments """
         save_root = 'experiments'
-        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
+        timestamp = existing_path if existing_path is not None else datetime.now().strftime("%d-%m-%Y_%H-%M")
         exp_dir = os.path.join(save_root, f"{timestamp}_{experiment_name}")
         os.makedirs(exp_dir, exist_ok=True)
         # tensorboard folder
@@ -114,8 +115,9 @@ class Trainer:
     
     def train(self, train_loader, val_loader, epochs=10, init_step=0, eval_freq=1e3, save_freq=None):
         """ Training the models for several iterations """
-        iter_ = 0
         total_batches = len(train_loader)
+        iter_ = init_step
+        init_epoch = (iter_) // total_batches
         batch_size = train_loader.batch_size
 
         EVAL_FREQUENCY = eval_freq # how often to evaluate
@@ -128,7 +130,7 @@ class Trainer:
 
         progress_bar = tqdm(total=epochs, initial=init_step)
 
-        for epoch in range(epochs):
+        for epoch in range(init_epoch, init_epoch+epochs):
             loss_list = []
             mean_loss = .0
 
