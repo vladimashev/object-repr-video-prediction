@@ -141,9 +141,9 @@ class SpatialTemporalBlock(nn.Module):
             mask = self.build_causal_mask(T, Np, x.device)
 
         xt = self.temporal_pe(xs)
-        xt = xt.reshape(B, T, Np, D).transpose(1, 2).reshape(B, Np * T, D)
+        xt = xt.reshape(B, T, Np, D).transpose(1, 2).reshape(B * Np, T, D)
         xt = self.ln_temporal(xt)
-        xt = self.attn_temporal(xt, attn_mask=mask)
+        xt = self.attn_temporal(xt, attn_mask=None)
         #xt = self.dropout(xt)
         xt = xt + xs
         xt = xt + self.mlp_temporal(self.ln_mlp_temporal(xt))

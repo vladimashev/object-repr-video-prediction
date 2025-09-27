@@ -42,6 +42,6 @@ def load_model(model, optimizer, model_name, save_path = get_save_root()):
     model.load_state_dict(checkpoint['model_state_dict'])
     if (optimizer):
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    stats = checkpoint["stats"]
+    stats = None #checkpoint["stats"]
     
     return model, optimizer, stats

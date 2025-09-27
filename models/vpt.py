@@ -121,11 +121,12 @@ class VideoFrameTransformer(nn.Module):
 
         B, T, Np, D = tokens.shape
 
+        old_tokens = tokens
         # Spatial+Temporal transformer blocks
         for blk in self.ar_transformer:
             tokens = blk(tokens)
 
-        pred_feats = self.proj(tokens)
+        pred_feats = self.proj(tokens) + old_tokens
 
         # Decoder
         preds = self.decoder(pred_feats)  # (B, T, C, H, W)

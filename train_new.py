@@ -454,7 +454,7 @@ class TrainerAutoRegressive(Trainer):
         context, future = inputs[:, :5], inputs[:, 5:]  # [B,5,..], [B,5,..]
         steps = 5
         preds = []
-        cur_context = context.detach().clone()
+        cur_context = context.clone()
         for t in range(steps):
             out = self.model(cur_context)          # (B, T, C, H, W)
             next_frame = out[:, -1]                # последний кадр
@@ -466,7 +466,7 @@ class TrainerAutoRegressive(Trainer):
                 
             # обновляем контекст (без градиентов)
             cur_context = torch.cat(
-                [cur_context[:, 1:], next_frame.unsqueeze(1)],
+                [cur_context[:,1:], next_frame.unsqueeze(1)],
                 dim=1
             )
         

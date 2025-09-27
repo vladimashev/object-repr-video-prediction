@@ -168,14 +168,56 @@ class MOViC_Dataset(Dataset):
             # list of form [(frame, mask), ...]
             return [(f, m) for f, m in zip(frames, masks)]
 
+            
+    # def __getitem__(self, idx):
+    #     frame_paths = self.sequences[idx]
+    #     mask_paths = self.masks[idx] if self.target == 'objects' else None
+    
+    #     frames, masks = None, None
+    #     needed = self.input_frames + self.target_frames
+    
+    #     if self.split == 'train':  # subsample when training, with step=2
+    #         step = 2
+    #         total = len(frame_paths)
+    #         required_len = 1 + (needed - 1) * step
+    #         max_start = max(0, total - required_len)
+    #         start_idx = random.randint(0, max_start)
+    #         sel = slice(start_idx, start_idx + required_len, step)
+    #     elif self.split == 'validation':  # no subsampling
+    #         step = 1
+    #         start_idx = 0
+    #         sel = slice(start_idx, start_idx + needed, step)
+    #     else:
+    #         step = 1
+    #         start_idx = 0
+    #         sel = slice(start_idx, start_idx + needed, step)
+    
+    #     # frames
+    #     paths = frame_paths[sel]
+    #     frames = torch.stack([self._load_image(path) for path in paths])  # [T, C, H, W]
+    #     frames = self.resizer_rgb(frames)
+    
+    #     # masks (same slice)
+    #     if self.target == 'objects':
+    #         masks = torch.stack(mask_paths[sel])  # [T, C, H, W]
+    #         masks = self.resizer_mask(masks)
+    
+    #     if self.split == 'train':
+    #         frames, masks = self.transform(frames, masks)
+    
+    #     if masks is None:
+    #         return frames
+    #     else:
+    #         return [(f, m) for f, m in zip(frames, masks)]
+    
     def _load_image(self, path):
         img = Image.open(path).convert("RGB")
         img = np.array(img).astype(np.float32) / 255.0
         img = torch.from_numpy(img).permute(2, 0, 1) # to C,H,W
-        return img    
+        return img
 
 
-# ================================= FLATTENED DATASETS ================================= 
+# ================================= FLATTENED DATASETS ================================ 
 
 DEFAULT_IMAGE_SIZE = (64, 64)
 
