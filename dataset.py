@@ -139,76 +139,79 @@ class MOViC_Dataset(Dataset):
     def __len__(self):
         return len(self.sequences)
 
-    def __getitem__(self, idx):
-        frame_paths = self.sequences[idx]
-        mask_paths = self.masks[idx] if self.target == 'objects' else None
-
-        if self.split == 'train': # subsample when training
-            total = len(frame_paths)
-            max_start = total - (self.input_frames + self.target_frames)
-            start_idx = random.randint(0, max_start)
-        elif self.split == 'validation': # no subsampling
-            start_idx = 0
-
-        frames, masks = None, None
-        paths = frame_paths[start_idx : start_idx + self.input_frames + self.target_frames]
-        frames = torch.stack([self._load_image(path) for path in paths])  # [T, C, H, W]
-        frames = self.resizer_rgb(frames)
-            
-        if self.target == 'objects': # masks are stored as tensors
-            masks = torch.stack(mask_paths[start_idx : start_idx + self.input_frames + self.target_frames])  # [T, C, H, W]
-            masks = self.resizer_mask(masks)
-
-        if self.split == 'train':
-            frames, masks = self.transform(frames, masks)
-
-        if masks is None:
-            return frames
-        else:
-            # list of form [(frame, mask), ...]
-            return [(f, m) for f, m in zip(frames, masks)]
-
-            
     # def __getitem__(self, idx):
     #     frame_paths = self.sequences[idx]
     #     mask_paths = self.masks[idx] if self.target == 'objects' else None
-    
-    #     frames, masks = None, None
-    #     needed = self.input_frames + self.target_frames
-    
-    #     if self.split == 'train':  # subsample when training, with step=2
-    #         step = 2
+
+    #     if self.split == 'train': # subsample when training
     #         total = len(frame_paths)
-    #         required_len = 1 + (needed - 1) * step
-    #         max_start = max(0, total - required_len)
+    #         max_start = total - (self.input_frames + self.target_frames)
     #         start_idx = random.randint(0, max_start)
-    #         sel = slice(start_idx, start_idx + required_len, step)
-    #     elif self.split == 'validation':  # no subsampling
-    #         step = 1
+    #     elif self.split == 'validation': # no subsampling
     #         start_idx = 0
-    #         sel = slice(start_idx, start_idx + needed, step)
-    #     else:
-    #         step = 1
-    #         start_idx = 0
-    #         sel = slice(start_idx, start_idx + needed, step)
-    
-    #     # frames
-    #     paths = frame_paths[sel]
+
+    #     frames, masks = None, None
+    #     paths = frame_paths[start_idx : start_idx + self.input_frames + self.target_frames]
     #     frames = torch.stack([self._load_image(path) for path in paths])  # [T, C, H, W]
     #     frames = self.resizer_rgb(frames)
-    
-    #     # masks (same slice)
-    #     if self.target == 'objects':
-    #         masks = torch.stack(mask_paths[sel])  # [T, C, H, W]
+            
+    #     if self.target == 'objects': # masks are stored as tensors
+    #         masks = torch.stack(mask_paths[start_idx : start_idx + self.input_frames + self.target_frames])  # [T, C, H, W]
     #         masks = self.resizer_mask(masks)
-    
+
     #     if self.split == 'train':
     #         frames, masks = self.transform(frames, masks)
-    
+
     #     if masks is None:
     #         return frames
     #     else:
+    #         # list of form [(frame, mask), ...]
     #         return [(f, m) for f, m in zip(frames, masks)]
+
+            
+    def __getitem__(self, idx):
+        frame_paths = self.sequences[idx]
+        mask_paths = self.masks[idx] if self.target == 'objects' else None
+    
+        # параметры выборки
+        step = 2 if self.split == 'train' else 1
+        need = self.input_frames + self.target_frames
+        total = len(frame_paths)
+    
+        if self.split == 'train':  # subsample when training, with step
+            # последний индекс последовательности: start_idx + step*(need-1)
+            max_start = total - 1 - step * (need - 1)
+            if max_start < 0:
+                raise ValueError(
+                    f"Sequence too short: total={total}, need={need}, step={step}"
+                )
+            start_idx = random.randint(0, max_start)
+        elif self.split == 'validation':  # no subsampling
+            start_idx = 0
+    
+        # индексы кадров с заданным шагом
+        idxs = list(range(start_idx, start_idx + step * need, step))
+    
+        # загрузка кадров
+        frames = torch.stack([self._load_image(frame_paths[i]) for i in idxs])  # [T, C, H, W]
+        frames = self.resizer_rgb(frames)
+    
+        # загрузка масок (хранятся как тензоры) тем же шагом
+        masks = None
+        if self.target == 'objects':
+            masks = torch.stack([mask_paths[i] for i in idxs])  # [T, C, H, W]
+            masks = self.resizer_mask(masks)
+    
+        # аугментации только на train
+        if self.split == 'train':
+            frames, masks = self.transform(frames, masks)
+    
+        # формат выхода
+        if masks is None:
+            return frames
+        else:
+            # список [(frame, mask), ...]
+            return [(f, m) for f, m in zip(frames, masks)]
     
     def _load_image(self, path):
         img = Image.open(path).convert("RGB")

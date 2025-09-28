@@ -145,9 +145,10 @@ class SpatialTemporalBlock(nn.Module):
         xt = self.ln_temporal(xt)
         xt = self.attn_temporal(xt, attn_mask=None)
         #xt = self.dropout(xt)
+        xt = xt.reshape(B, Np, T, D).transpose(1, 2).reshape(B, T*Np, D)
         xt = xt + xs
         xt = xt + self.mlp_temporal(self.ln_mlp_temporal(xt))
 
-        xt = xt.reshape(B, Np, T, D).transpose(1, 2)
+        xt = xt.reshape(B, T, Np, D)
 
         return xt

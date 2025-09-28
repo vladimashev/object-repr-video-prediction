@@ -1,5 +1,0 @@
-epochs=10, batch_size=64, learning_rate=0.001, start_step=0
-Patch size = 16, Embed dim = 256, MLP size = 1024
-epochs=10, batch_size=64, learning_rate=0.001, start_step=36520
-epochs=11, batch_size=64, learning_rate=0.001, start_step=73040
-epochs=21, batch_size=64, learning_rate=0.001, start_step=113212

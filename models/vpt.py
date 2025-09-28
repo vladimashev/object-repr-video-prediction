@@ -100,7 +100,8 @@ class VideoFrameTransformer(nn.Module):
             )
             for _ in range(num_tf_layers_ar)
         ])
-        self.proj = nn.Linear(embed_dim, embed_dim)
+        self.proj1 = nn.Linear(embed_dim, embed_dim)
+        self.proj2 = nn.Linear(embed_dim, embed_dim)
 
         # --- Decoder ---
         self.decoder = decoder
@@ -114,19 +115,20 @@ class VideoFrameTransformer(nn.Module):
         Returns:
             preds: (B, T, C, H, W)
 
-    
         """
         # Encoder
         tokens = self.encoder(x)  # (B, T, Np, D)
 
+        tokens = self.proj1(tokens)
+        
         B, T, Np, D = tokens.shape
-
+        
         old_tokens = tokens
         # Spatial+Temporal transformer blocks
         for blk in self.ar_transformer:
             tokens = blk(tokens)
 
-        pred_feats = self.proj(tokens) + old_tokens
+        pred_feats = self.proj2(tokens) + old_tokens
 
         # Decoder
         preds = self.decoder(pred_feats)  # (B, T, C, H, W)

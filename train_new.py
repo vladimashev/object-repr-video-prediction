@@ -11,6 +11,7 @@ from PIL import Image
 
 from save_load import save_model as save_model_default
 from utils.move_to_device import move_to_device
+from utils.visualize_video_sample import draw_rollout_grid
 
 
 GET_DEFAULT_OPTIMIZER = lambda m: torch.optim.Adam(m.parameters(), lr=1e-3)
@@ -501,20 +502,7 @@ class TrainerAutoRegressive(Trainer):
         fut_seq   = future[0]       # (15, C, H, W)
         pred_seq  = preds[0]        # (15, C, H, W)
     
-        # Грид: входы | разделитель | GT | предсказания
-        grid = torch.cat([
-            ctx_seq,
-            torch.zeros_like(ctx_seq[:1]),   # разделитель
-            fut_seq,
-            pred_seq
-        ], dim=0)  # (N, C, H, W)
-    
-        grid = torchvision.utils.make_grid(grid, nrow=7, normalize=True)
-    
-        self.writer.add_image(f"Sequences/rollout", grid, global_step=iter_)
-        torchvision.utils.save_image(
-            grid, os.path.join(self.dir_imgs, f"rollout_{iter_:06d}.png")
-        )
+        draw_rollout_grid(ctx_seq, fut_seq, pred_seq, self.writer, self.dir_imgs, iter_, mode='val')
 
         # gif
         scale = 4
@@ -530,10 +518,10 @@ class TrainerAutoRegressive(Trainer):
                 img = img.resize((int(w * scale), int(h * scale)), Image.NEAREST)
             images.append(img)
 
-        gif_path = os.path.join(self.dir_imgs, f"rollout_{iter_:06d}.gif")
+        gif_path = os.path.join(self.dir_imgs, f"rollout_val_{iter_:06d}.gif")
         imageio.mimsave(gif_path, images, fps=5)
 
-    def _log_predictions_next5(self, batch, iter_):
+    def _log_predictions_next5(self, batch, iter_, step=None):
         context = batch[0, :5].unsqueeze(0)   # (1, 5, C, H, W)
         future  = batch[0, 5:].unsqueeze(0)   # (1, 5, C, H, W)
         B, _, C, H, W = context.shape
@@ -545,6 +533,7 @@ class TrainerAutoRegressive(Trainer):
                 out = self.model(cur_context)             # [1, T=5, C, H, W]
                 next_frame = out[:, -1]                   # берём последний предсказанный кадр
                 preds.append(next_frame.unsqueeze(1))     # [1, 1, C, H, W]
+                draw_rollout_grid(cur_context[0], future[0, t, :].unsqueeze(0), next_frame, self.writer, self.dir_imgs, iter_, step=t)
                 # autoregressive update
                 cur_context = torch.cat([cur_context[:, 1:], next_frame.unsqueeze(1)], dim=1)
     
@@ -554,20 +543,7 @@ class TrainerAutoRegressive(Trainer):
         fut_seq   = future[0]       # (5, C, H, W)
         pred_seq  = preds[0]        # (5, C, H, W)
     
-        # Грид: входы | разделитель | GT | предсказания
-        grid = torch.cat([
-            ctx_seq,
-            torch.zeros_like(ctx_seq[:1]),   # разделитель
-            fut_seq,
-            pred_seq
-        ], dim=0)  # (N, C, H, W)
-    
-        grid = torchvision.utils.make_grid(grid, nrow=7, normalize=True)
-    
-        self.writer.add_image(f"Sequences/rollout/train", grid, global_step=iter_)
-        torchvision.utils.save_image(
-            grid, os.path.join(self.dir_imgs, f"rollout_train_{iter_:06d}.png")
-        )
+        draw_rollout_grid(ctx_seq, fut_seq, pred_seq, self.writer, self.dir_imgs, iter_)
 
         # gif
         scale = 4
@@ -582,6 +558,6 @@ class TrainerAutoRegressive(Trainer):
                 w, h = img.size
                 img = img.resize((int(w * scale), int(h * scale)), Image.NEAREST)
             images.append(img)
-
+            
         gif_path = os.path.join(self.dir_imgs, f"rollout_train_{iter_:06d}.gif")
         imageio.mimsave(gif_path, images, fps=5)
