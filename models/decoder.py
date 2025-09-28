@@ -94,8 +94,8 @@ class SlotTransformerDecoder(nn.Module):
         mask_logits = out[:, 3:4]
         # reshape to [B, T, K, H, W]
         mask_logits = mask_logits.view(B, T, K, 1, H, W)
-        obj_masks = torch.softmax(mask_logits, dim=2)   # [B,K,1,H,W]
-        
+        obj_masks = torch.softmax(mask_logits, dim=2)   # [B,K,1,H,W] <- чего??? может [B,T,K,1,H,W] ??
+
         recon = torch.sum(obj_masks * obj_rgbs, dim=2)   # [B,T,3,H,W]
 
-        return recon
+        return recon, mask_logits.argmax(dim=2).squeeze(2)

@@ -210,8 +210,8 @@ class MOViC_Dataset(Dataset):
         if masks is None:
             return frames
         else:
-            # список [(frame, mask), ...]
-            return [(f, m) for f, m in zip(frames, masks)]
+            #return [(f, m) for f, m in zip(frames, masks)]
+            return frames, masks
     
     def _load_image(self, path):
         img = Image.open(path).convert("RGB")
