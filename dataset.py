@@ -294,5 +294,5 @@ class MaskDataset(FrameDataset):
         item = super().__getitem__(idx)
         
         # add T dim for images to match predictor's format
-        return item["img"].unsqueeze(0), item["mask"]#.unsqueeze(0)
+        return item["img"].unsqueeze(0), item["mask"]
     
