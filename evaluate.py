@@ -1,4 +1,6 @@
+from fvd import execute_default_fvd
 import torch
+import torch.nn.functional as F
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
@@ -46,6 +48,8 @@ def evaluate_autoencoder(model, dataloader, device='cuda', lpips_net='alex'):
             model_input = imgs
 
         recon = model(model_input)
+        if isinstance(recon, (tuple, list)):
+            recon = recon[0]
         recon = recon.to(device)
 
         # MSE/MAE loss over whole batch/time
