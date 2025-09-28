@@ -170,19 +170,19 @@ class Trainer:
                 # EVALUATION STEP
                 if ((iter_ % EVAL_FREQUENCY == 0 or is_last_batch) and self.evaluate is not None):
                     # evaluation metrics
-                    eval_metrics = self.evaluate(self.model, val_loader, self.device)
-                    self.model.train()
+                    # eval_metrics = self.evaluate(self.model, val_loader, self.device)
+                    # self.model.train()
 
-                    assert isinstance(eval_metrics, dict), "Eval metrics must be of dict type for CSV logging."
-                    eval_metric_names = eval_metrics.keys()
+                    # assert isinstance(eval_metrics, dict), "Eval metrics must be of dict type for CSV logging."
+                    # eval_metric_names = eval_metrics.keys()
 
-                    csv_headers += eval_metric_names
-                    metrics = {**train_metrics, **eval_metrics}
-                    self._log(metrics)
-                    self._log_to_csv(metrics, csv_headers)
+                    # csv_headers += eval_metric_names
+                    # metrics = {**train_metrics, **eval_metrics}
+                    # self._log(metrics)
+                    # self._log_to_csv(metrics, csv_headers)
 
-                    for metric_name in eval_metric_names:
-                        self.writer.add_scalar(f"{metric_name}/Valid", eval_metrics[metric_name], global_step=iter_)
+                    # for metric_name in eval_metric_names:
+                    #     self.writer.add_scalar(f"{metric_name}/Valid", eval_metrics[metric_name], global_step=iter_)
 
                     # image logging
                     if (iter_ > 0):
@@ -195,7 +195,6 @@ class Trainer:
 
                             if recon.ndim == 5:
                                 recon = recon[:, 0] # take batch with T=1 for logging
-
                             grid = torchvision.utils.make_grid(recon.detach().cpu())
                             self.writer.add_image('Images/Train', grid, global_step=iter_)
                             torchvision.utils.save_image(grid, os.path.join(self.dir_imgs, f"imgs_{iter_}.png"))
