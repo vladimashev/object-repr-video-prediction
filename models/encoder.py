@@ -72,6 +72,7 @@ class ObjectCNNEncoder(nn.Module):
         z = self.fc(feat.view(feat.size(0), -1))
         return z
 
+
 class SlotTransformerEncoder(nn.Module):
     def __init__(self, embed_dim=256, depth=3, nhead=8, mlp_ratio=4.0, num_slots=10):
         super().__init__()
@@ -84,8 +85,11 @@ class SlotTransformerEncoder(nn.Module):
     def forward(self, item):
         """
         item: (imgs, masks)
-        imgs: [B, T, 3, H, W]
-        masks: [B, T, 1, H, W]
+          imgs: [B, T, 3, H, W]
+          masks: [B, T, H, W]
+
+        returns:
+          slots: [B, T, K, D]
         """
         imgs, masks = item
         B, T, C, H, W = imgs.shape
@@ -95,25 +99,22 @@ class SlotTransformerEncoder(nn.Module):
         for t in range(T):
             objs_t = []
             for k in range(K):
-                mask_k = (masks[:, t] == k)          # [B,1,H,W] boolean
+                mask_k = (masks[:, t] == k).unsqueeze(1)    # [B,1,H,W] boolean
                 objs_t.append(imgs[:, t] * mask_k.float())  # [B,C,H,W]
-            objs_t = torch.stack(objs_t, dim=1)     # [B,K,C,H,W]
+            objs_t = torch.stack(objs_t, dim=1)             # [B,K,C,H,W]
             objs_all.append(objs_t)
-        objs = torch.stack(objs_all, dim=1)         # [B,T,K,C,H,W]
-        # print('objs shape [B,T,K,C,H,W]', objs.shape)
+        objs = torch.stack(objs_all, dim=1)                 # [B,T,K,C,H,W]
 
-        z = self.encoder_cnn(objs.view(B*T*K,C,H,W))
+        z = self.encoder_cnn(objs.view(B*T*K, C, H, W))
         slot_embeddings = z.view(B, T, K, -1)
-        # print('slot_embeddings [B,T,K,D]', slot_embeddings.shape)
         
         z_refined = []
         for t in range(T):
             z_refined_t = self.encoder(slot_embeddings[:, t, :, :])    # [B,K,D]
             z_refined.append(z_refined_t)
-        z_refined = torch.stack(z_refined, dim=1)        # [B,T,K,D]
-        # print("z_refined [B,T,K,D]", z_refined.shape)
-        # z_slots_refined = self.encoder(slot_embeddings)
-        # mem = z_slots_refined.view(B*K, -1)
+        z_refined = torch.stack(z_refined, dim=1)                      # [B,T,K,D]
+        # print(z_refined.shape)
 
         return z_refined
+
     

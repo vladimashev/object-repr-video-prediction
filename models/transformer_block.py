@@ -115,7 +115,7 @@ class SpatialTemporalBlock(nn.Module):
     #     mask = time_mask.repeat_interleave(Np, dim=0).repeat_interleave(Np, dim=1) # [T*Np, T*Np], all patches can attent to one another
     #     return mask.to(device)
 
-    def forward(self, x):
+    def forward(self, x, target='rgb'):
         """
         x: (B, T, Np, D)
 

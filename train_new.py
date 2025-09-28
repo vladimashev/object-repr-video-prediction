@@ -11,7 +11,7 @@ from PIL import Image
 
 from save_load import save_model as save_model_default
 from utils.move_to_device import move_to_device
-from utils.visualize_video_sample import draw_rollout_grid
+from utils.visualize_video_sample import draw_rollout_grid, masks_to_rgb_tensor
 
 
 GET_DEFAULT_OPTIMIZER = lambda m: torch.optim.Adam(m.parameters(), lr=1e-3)
@@ -480,7 +480,6 @@ class TrainerObjAutoRegressive(Trainer):
         preds = []
         cur_context = (context[0].clone(), context[1].clone())
         for t in range(steps):
-            print(cur_context[0].shape, cur_context[1].shape)
             out = self.model(cur_context)          # ([B, T, C, H, W)], [B, T, H, W)]) of (frames, masks)
             next_frame = out[0][:, -1]
             next_mask = out[1][:, -1]
@@ -597,12 +596,12 @@ class TrainerObjAutoRegressive(Trainer):
                 )
                 # по-кадровый лог (masks)
                 draw_rollout_grid(
-                    masks_to_rgb_tensor(cur_context[1][0]),               # [5,3,H,W]
-                    masks_to_rgb_tensor(future_m[0, t, ...].unsqueeze(0)),# [1,3,H,W]
-                    masks_to_rgb_tensor(next_m.squeeze(0)),               # [1,3,H,W]
+                    masks_to_rgb_tensor(cur_context[1][0]),                 # [5,3,H,W]
+                    masks_to_rgb_tensor(future_m[0, t, ...].unsqueeze(0)),  # [1,3,H,W]
+                    masks_to_rgb_tensor(next_m),                            # [1,3,H,W]  <-- без squeeze
                     self.writer, self.dir_imgs, iter_, mode=f"train_masks_step{t:02d}"
                 )
-    
+                    
                 # autoregressive update
                 cur_context = (
                     torch.cat([cur_context[0][:, 1:], next_f.unsqueeze(1)], dim=1),
@@ -620,7 +619,7 @@ class TrainerObjAutoRegressive(Trainer):
                           masks_to_rgb_tensor(fut_m),
                           masks_to_rgb_tensor(preds_m),
                           self.writer, self.dir_imgs, iter_, mode='train_masks')
-    
+
         # GIF: frames
         scale = 4
         seq_np = (torch.cat([ctx_f, preds_f], dim=0).clamp(0,1)*255).byte().cpu().permute(0,2,3,1).numpy()

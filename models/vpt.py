@@ -179,14 +179,14 @@ class VideoObjectTransformer(nn.Module):
         # Encoder
         tokens = self.encoder(x)  # (B, T, Np, D)
 
-        tokens = self.proj1(tokens)
+        #tokens = self.proj1(tokens)
         
         B, T, Np, D = tokens.shape
         
         old_tokens = tokens
         # Spatial+Temporal transformer blocks
         for blk in self.ar_transformer:
-            tokens = blk(tokens)
+            tokens = blk(tokens, target='objects')
 
         pred_feats = self.proj2(tokens) + old_tokens
 
