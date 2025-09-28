@@ -156,6 +156,12 @@ def evaluate_autoencoder(model, dataloader, device='cuda', lpips_net='alex'):
 
 @torch.no_grad()
 def evaluate_ar_transformer(model, dataloader, device, steps=15):
+    """
+    Оцениваем ТОЛЬКО кадры (frames).
+    Ожидаемый batch: (frames, masks), где:
+      frames: [B, T, C, H, W] float в [0,1]
+      masks:  [B, T, H, W]     long/uint (НЕ используется в метриках)
+    """
     model.eval()
 
     criterion = torch.nn.L1Loss()
@@ -167,62 +173,154 @@ def evaluate_ar_transformer(model, dataloader, device, steps=15):
     total_lpips = 0.0
     count = 0
 
-    preds_all, gts_all = [], []
-
     for _, batch in enumerate(dataloader):
-        batch = batch.to(device)  # [B, T = 20, C, H, W]
-        context, future = batch[:, :5], batch[:, 5:]  # (B,5,..), (B,15,..)
+        # ---- распаковка батча ----
+        if isinstance(batch, (list, tuple)) and len(batch) == 2:
+            frames, masks = batch
+            frames = frames.to(device, non_blocking=True)
+            masks  = masks.to(device, non_blocking=True)
+        else:
+            # fallback: только кадры
+            frames = batch.to(device, non_blocking=True)
+            masks  = None
 
-        B, _, C, H, W = context.shape
-        preds = []
+        # ---- разбиение на контекст и будущее ----
+        context_f = frames[:, :5]              # [B, 5, C, H, W]
+        future_f  = frames[:, 5:5+steps]       # [B, steps, C, H, W]
+        context_m = masks[:,  :5] if masks is not None else None
 
-        # autoregressive rollout
-        cur_context = context.clone()
-        for t in range(steps):
-            out = model(cur_context)              # [B, T = 5, C, H, W]
-            next_frame = out[:, -1]               # last frame
-            preds.append(next_frame.unsqueeze(1)) # [B, 1, C, H, W]
+        B = frames.size(0)
+        preds_f = []
 
-            # add prediction to the context
-            cur_context = torch.cat([cur_context[:, 1:], next_frame.unsqueeze(1)], dim=1)
+        # текущее окно контекста
+        cur_context = (context_f.clone(), context_m.clone() if context_m is not None else None)
 
-        preds = torch.cat(preds, dim=1)  # (B, 15, C, H, W)
+        # ---- авторегрессия ----
+        for _ in range(steps):
+            if cur_context[1] is not None:
+                # модель возвращает (pred_frames, pred_masks)
+                out_f, out_m = model(cur_context)       # ([B,5,C,H,W], [B,5,H,W])
+                next_f = out_f[:, -1]                   # [B,C,H,W]
+                next_m = out_m[:, -1]                   # [B,H,W]
+                # обновляем контекст (сдвиг окна по времени)
+                cur_context = (
+                    torch.cat([cur_context[0][:, 1:], next_f.unsqueeze(1)], dim=1),
+                    torch.cat([cur_context[1][:, 1:], next_m.unsqueeze(1)], dim=1),
+                )
+            else:
+                # если модель принимает только frames
+                out_f = model(cur_context[0])            # [B,5,C,H,W]
+                next_f = out_f[:, -1]                    # [B,C,H,W]
+                cur_context = (torch.cat([cur_context[0][:, 1:], next_f.unsqueeze(1)], dim=1), None)
 
-        # calculate metrics
-        loss = criterion(preds, future)
+            preds_f.append(next_f.unsqueeze(1))          # [B,1,C,H,W]
+
+        preds = torch.cat(preds_f, dim=1)                # [B, steps, C, H, W]
+
+        # ---- метрики по кадрам ----
+        loss = criterion(preds, future_f)
         total_loss += loss.item()
 
         for j in range(B):
             for t in range(steps):
-                x = future[j, t].detach().cpu().numpy().transpose(1, 2, 0)
+                x = future_f[j, t].detach().cpu().numpy().transpose(1, 2, 0)  # [H,W,C]
                 y = preds[j, t].detach().cpu().numpy().transpose(1, 2, 0)
 
-                x_clipped = (np.clip(x, 0, 1) * 255).astype("uint8")
-                y_clipped = (np.clip(y, 0, 1) * 255).astype("uint8")
+                x_u8 = (np.clip(x, 0, 1) * 255).astype("uint8")
+                y_u8 = (np.clip(y, 0, 1) * 255).astype("uint8")
 
-                total_ssim += ssim(x_clipped, y_clipped, data_range=255, channel_axis=-1)
-                total_psnr += psnr(x_clipped, y_clipped, data_range=255)
+                total_ssim  += ssim(x_u8, y_u8, data_range=255, channel_axis=-1)
+                total_psnr  += psnr(x_u8, y_u8, data_range=255)
 
-                # LPIPS
-                pred_norm = preds[j, t].unsqueeze(0) * 2 - 1
-                gt_norm = future[j, t].unsqueeze(0) * 2 - 1
-                total_lpips += lpips_metric(pred_norm, gt_norm).item()
+                # LPIPS ждёт тензоры в [-1,1]
+                pred_norm = preds[j, t].unsqueeze(0).to(device) * 2 - 1  # [1,C,H,W]
+                gt_norm   = future_f[j, t].unsqueeze(0).to(device) * 2 - 1
+                total_lpips += float(lpips_metric(pred_norm, gt_norm).item())
 
                 count += 1
 
-    del preds, future, batch, context, cur_context, out, next_frame
-    torch.cuda.empty_cache()
-
-    #TODO: add fvd
-    
-    avg_loss = total_loss / len(dataloader)
-    avg_ssim = total_ssim / count
-    avg_psnr = total_psnr / count
-    avg_lpips = total_lpips / count
+    # усреднение
+    avg_loss  = total_loss / max(len(dataloader), 1)
+    avg_ssim  = total_ssim / max(count, 1)
+    avg_psnr  = total_psnr / max(count, 1)
+    avg_lpips = total_lpips / max(count, 1)
 
     return {
-        "Loss": avg_loss,
-        "SSIM": avg_ssim,
-        "PSNR": avg_psnr,
+        "Loss":  avg_loss,
+        "SSIM":  avg_ssim,
+        "PSNR":  avg_psnr,
         "LPIPS": avg_lpips,
     }
+
+# @torch.no_grad()
+# def evaluate_ar_transformer(model, dataloader, device, steps=15):
+#     model.eval()
+
+#     criterion = torch.nn.L1Loss()
+#     lpips_metric = LPIPS(net="alex").to(device)
+
+#     total_loss = 0.0
+#     total_ssim = 0.0
+#     total_psnr = 0.0
+#     total_lpips = 0.0
+#     count = 0
+
+#     preds_all, gts_all = [], []
+
+#     for _, batch in enumerate(dataloader):
+#         batch = batch.to(device)  # [B, T = 20, C, H, W]
+#         context, future = batch[:, :5], batch[:, 5:]  # (B,5,..), (B,15,..)
+
+#         B, _, C, H, W = context.shape
+#         preds = []
+
+#         # autoregressive rollout
+#         cur_context = context.clone()
+#         for t in range(steps):
+#             out = model(cur_context)              # [B, T = 5, C, H, W]
+#             next_frame = out[:, -1]               # last frame
+#             preds.append(next_frame.unsqueeze(1)) # [B, 1, C, H, W]
+
+#             # add prediction to the context
+#             cur_context = torch.cat([cur_context[:, 1:], next_frame.unsqueeze(1)], dim=1)
+
+#         preds = torch.cat(preds, dim=1)  # (B, 15, C, H, W)
+
+#         # calculate metrics
+#         loss = criterion(preds, future)
+#         total_loss += loss.item()
+
+#         for j in range(B):
+#             for t in range(steps):
+#                 x = future[j, t].detach().cpu().numpy().transpose(1, 2, 0)
+#                 y = preds[j, t].detach().cpu().numpy().transpose(1, 2, 0)
+
+#                 x_clipped = (np.clip(x, 0, 1) * 255).astype("uint8")
+#                 y_clipped = (np.clip(y, 0, 1) * 255).astype("uint8")
+
+#                 total_ssim += ssim(x_clipped, y_clipped, data_range=255, channel_axis=-1)
+#                 total_psnr += psnr(x_clipped, y_clipped, data_range=255)
+
+#                 # LPIPS
+#                 pred_norm = preds[j, t].unsqueeze(0) * 2 - 1
+#                 gt_norm = future[j, t].unsqueeze(0) * 2 - 1
+#                 total_lpips += lpips_metric(pred_norm, gt_norm).item()
+
+#                 count += 1
+
+#     del preds, future, batch, context, cur_context, out, next_frame
+#     torch.cuda.empty_cache()
+
+#     #TODO: add fvd
+    
+#     avg_loss = total_loss / len(dataloader)
+#     avg_ssim = total_ssim / count
+#     avg_psnr = total_psnr / count
+#     avg_lpips = total_lpips / count
+
+#     return {
+#         "Loss": avg_loss,
+#         "SSIM": avg_ssim,
+#         "PSNR": avg_psnr,
+#         "LPIPS": avg_lpips,
+#     }

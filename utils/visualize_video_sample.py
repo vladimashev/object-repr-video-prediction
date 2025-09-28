@@ -111,3 +111,31 @@ def draw_rollout_grid(ctx_seq, fut_seq, pred_seq, writer, dir_imgs, iter_, mode=
     writer.add_image("Sequences/rollout/train", grid_tensor, global_step=iter_)
     os.makedirs(dir_imgs, exist_ok=True)
     torchvision.utils.save_image(grid_tensor, os.path.join(dir_imgs, f"rollout_{mode}_{iter_:06d}_{suffix}.png"))
+
+def _simple_palette(n=256):
+    # фиксированная палитра на ~20 цветов, далее берём по модулю
+    base = torch.tensor([
+        [  0,   0,   0], [255,   0,   0], [  0, 255,   0], [  0,   0, 255],
+        [255, 255,   0], [255,   0, 255], [  0, 255, 255], [255, 128,   0],
+        [128,  64,   0], [128,   0, 128], [  0, 128, 128], [128, 128,   0],
+        [ 64,  64, 255], [ 64, 255,  64], [255,  64,  64], [192, 192, 192],
+        [128, 128, 128], [ 64,  64,  64], [255, 128, 128], [128, 255, 128],
+    ], dtype=torch.uint8)
+    if n <= base.size(0):
+        return base[:n]
+    reps = (n + base.size(0) - 1) // base.size(0)
+    return base.repeat(reps, 1)[:n]
+
+def masks_to_rgb_tensor(mask_seq: torch.Tensor) -> torch.Tensor:
+    """
+    mask_seq: [T, H, W], целые метки 0..K-1
+    return:   [T, 3, H, W], float32 в [0,1]
+    """
+    assert mask_seq.dim() == 3, f"ожидаю [T,H,W], получил {mask_seq.shape}"
+    mask_seq = mask_seq.detach().cpu().long()
+    num_classes = int(mask_seq.max().item()) + 1 if mask_seq.numel() > 0 else 1
+    palette = _simple_palette(max(256, num_classes))
+    # индексация палитры → [T,H,W,3]
+    rgb = palette[mask_seq]                       # uint8
+    rgb = rgb.permute(0, 3, 1, 2).float() / 255.0 # [T,3,H,W], float in [0,1]
+    return rgb

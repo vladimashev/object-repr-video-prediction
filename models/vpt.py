@@ -134,3 +134,63 @@ class VideoFrameTransformer(nn.Module):
         preds = self.decoder(pred_feats)  # (B, T, C, H, W)
 
         return preds
+
+
+class VideoObjectTransformer(nn.Module):
+    def __init__(self, encoder, decoder, embed_dim, attn_dim, num_heads,
+                 mlp_size, num_tf_layers_ar, obj_num=10):
+        super().__init__()
+
+        # --- Encoder ---
+        self.encoder = encoder
+        for p in self.encoder.parameters():
+            p.requires_grad = False
+
+        # --- Autoregressive Transformer (spatial+temporal) ---
+        self.ar_transformer = nn.ModuleList([
+            SpatialTemporalBlock(
+                token_dim=embed_dim,
+                attn_dim=attn_dim,
+                num_heads=num_heads,
+                mlp_size=mlp_size,
+                grid=None,
+                max_len=obj_num * 15, # max 15 frames with obj_num objects
+                causal=True,
+                target='obj'
+            )
+            for _ in range(num_tf_layers_ar)
+        ])
+        self.proj1 = nn.Linear(embed_dim, embed_dim)
+        self.proj2 = nn.Linear(embed_dim, embed_dim)
+
+        # --- Decoder ---
+        self.decoder = decoder
+        for p in self.decoder.parameters():
+            p.requires_grad = False
+
+    def forward(self, x):
+        """
+        Args:
+            x:  tuple ([B, T, C, H, W], [B, T, H, W])
+        Returns:
+            preds: tuple ([B, T, C, H, W], [B, T, H, W]) of future frames+masks 
+
+        """
+        # Encoder
+        tokens = self.encoder(x)  # (B, T, Np, D)
+
+        tokens = self.proj1(tokens)
+        
+        B, T, Np, D = tokens.shape
+        
+        old_tokens = tokens
+        # Spatial+Temporal transformer blocks
+        for blk in self.ar_transformer:
+            tokens = blk(tokens)
+
+        pred_feats = self.proj2(tokens) + old_tokens
+
+        # Decoder
+        preds = self.decoder(pred_feats)  # tuple ([B, T, C, H, W], [B, T, H, W])
+
+        return preds

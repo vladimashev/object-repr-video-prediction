@@ -81,10 +81,10 @@ class TransformerBlock(nn.Module):
 
 
 class SpatialTemporalBlock(nn.Module):
-    def __init__(self, token_dim, attn_dim, num_heads, mlp_size, grid, max_len, causal=True):
+    def __init__(self, token_dim, attn_dim, num_heads, mlp_size, grid, max_len, causal=True, target='rgb'):
         super().__init__()
         self.causal = causal
-        self.spatial_pe = PositionalEncoding2D(token_dim, grid)
+        self.spatial_pe = PositionalEncoding2D(token_dim, grid) if target=='rgb' else None
         self.temporal_pe = PositionalEncoding(token_dim, max_len)
         self.dropout = nn.Dropout(0.3)
 
@@ -126,7 +126,9 @@ class SpatialTemporalBlock(nn.Module):
         B, T, Np, D = x.shape
 
         # === Spatial Attention within each frame ===
-        x_spatial = self.spatial_pe(x)
+        x_spatial = x
+        if target == 'rgb': # no PE in case of objects
+            x_spatial = self.spatial_pe(x_spatial)
         x_spatial = x_spatial.reshape(B * T, Np, D) # [B*T, Np, D]
         xs = self.ln_spatial(x_spatial)
         xs = self.attn_spatial(xs)
@@ -136,14 +138,10 @@ class SpatialTemporalBlock(nn.Module):
         xs = xs.reshape(B, T*Np, D) # [B, T*Np, D]
 
         # === Temporal Attention between frames ===
-        mask = None
-        if self.causal:
-            mask = self.build_causal_mask(T, Np, x.device)
-
         xt = self.temporal_pe(xs)
         xt = xt.reshape(B, T, Np, D).transpose(1, 2).reshape(B * Np, T, D)
         xt = self.ln_temporal(xt)
-        xt = self.attn_temporal(xt, attn_mask=None)
+        xt = self.attn_temporal(xt)
         #xt = self.dropout(xt)
         xt = xt.reshape(B, Np, T, D).transpose(1, 2).reshape(B, T*Np, D)
         xt = xt + xs

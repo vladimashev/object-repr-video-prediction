@@ -135,7 +135,7 @@ class Trainer:
             for batch in train_loader:
                 batch = move_to_device(batch, self.device)
                 
-                loss_item = self.train_one_step(batch)
+                loss_item = self.train_one_step(batch, iter_)
                 loss_list.append(loss_item)
             
                 # updating progress bar
@@ -331,113 +331,6 @@ class TrainerAutoRegressive(Trainer):
         super().__init__(model, evaluate, optimizer, criterion, scheduler,
                          experiment_name, save_model if save_model else save_model_default)
 
-    def train(self, train_loader, val_loader, epochs=10, init_step=0, eval_freq=1e3, save_freq=None):
-        """ Training the models for several iterations """
-        iter_ = 0
-        total_batches = len(train_loader)
-        batch_size = train_loader.batch_size
-
-        EVAL_FREQUENCY = eval_freq # how often to evaluate
-        SAVE_FREQUENCY = save_freq if save_freq else total_batches - 1 # how often to take snapshots
-        
-        progress_bar = tqdm(total=epochs, initial=init_step)
-
-        for epoch in range(epochs):
-            loss_list = []
-            mean_loss = .0
-
-            for batch in train_loader:
-                batch = move_to_device(batch, self.device)
-                
-                loss_item = self.train_one_step(batch, iter_)
-                loss_list.append(loss_item)
-            
-                # updating progress bar
-                progress_bar.set_description(f"Ep {epoch} Iter {iter_}: Loss={round(loss_item,5)})")
-                
-                # logging
-                self.writer.add_scalar(f'Loss/Train', loss_item, global_step=iter_)
-
-                train_metrics = {
-                    "iter": iter_,
-                    "batch_size": batch_size,
-                    "epoch": epoch,
-                    "loss": loss_item
-                }
-
-                # if last batch of the epoch, track averaged loss as well
-                if (epoch > 0 and ((iter_+1) // total_batches) > epoch):
-                    mean_loss = np.mean(loss_list)
-                    train_metrics["mean_loss"] = mean_loss
-                    # track the best configuration
-                    if mean_loss < self.best_loss:
-                        self.best_model = self.model.state_dict()
-                        self.best_optimizer = self.optimizer.state_dict()
-                        if self.scheduler: self.best_scheduler = self.scheduler.state_dict()
-                        self.best_loss = mean_loss
-                        self.best_epoch = epoch
-                
-                csv_headers = ["iter", "batch_size", "epoch", "loss", "mean_loss"]
-                
-                # EVALUATION STEP
-                if (iter_ % EVAL_FREQUENCY == 0 and self.evaluate is not None):
-                    # evaluation metrics
-                    eval_metrics = self.evaluate(self.model, val_loader, self.device)
-                    self.model.train()
-
-                    assert isinstance(eval_metrics, dict), "Eval metrics must be of dict type for CSV logging."
-                    eval_metric_names = eval_metrics.keys()
-
-                    csv_headers += eval_metric_names
-                    metrics = {**train_metrics, **eval_metrics}
-                    self._log(metrics)
-                    self._log_to_csv(metrics, csv_headers)
-
-                    for metric_name in eval_metric_names:
-                        self.writer.add_scalar(f"{metric_name}/Valid", eval_metrics[metric_name], global_step=iter_)
-
-                    # image logging
-                    if (iter_ > 0):
-                        with torch.no_grad():
-                            val_batch = move_to_device(next(iter(val_loader)), self.device)
-                            self._log_predictions(val_batch, iter_)
-                    
-                # o/w track only train metrics
-                else:
-                    self._log_to_csv(train_metrics, csv_headers)
-
-                # SAVE SNAPSHOT
-                if (iter_ > 0) and (iter_ % SAVE_FREQUENCY == 0):
-                    finished_epoch = (iter_+1) // total_batches
-                    self.save_model(self.model, self.optimizer, self.scheduler,
-                               stats={ "epoch": finished_epoch, "iter_": iter_+1 },
-                               save_path=self.dir_checkpoints,
-                               model_name=f"epoch_{finished_epoch:03d}_iter_{iter_+1:05d}")
-                
-                iter_ = iter_ + 1
-            
-            if self.scheduler: 
-                self.scheduler.step(mean_loss)
-
-        print(f"Training completed")
-
-        # save very last state
-        finished_epoch = (iter_) // total_batches
-        self.save_model(self.model, self.optimizer, self.scheduler,
-                    stats={ "epoch": finished_epoch, "iter_": iter_ },
-                    save_path=self.dir_checkpoints,
-                    model_name=f"epoch_{finished_epoch:03d}_iter_{iter_:05d}")
-        
-        # save the best model condition
-        # torch.save({
-        #     'model_state_dict': self.best_model,
-        #     'optimizer_state_dict': self.best_optimizer,
-        #     'scheduler_state_dict': self.best_scheduler,
-        #     'stats': { "epoch": self.best_epoch }
-        # }, f"{self.dir_checkpoints}/best_model_{self.best_epoch:03d}.pth")
-
-        return
-
     def train_one_step(self, inputs, iter_):
         """
         batch 
@@ -561,3 +454,195 @@ class TrainerAutoRegressive(Trainer):
             
         gif_path = os.path.join(self.dir_imgs, f"rollout_train_{iter_:06d}.gif")
         imageio.mimsave(gif_path, images, fps=5)
+
+
+class TrainerObjAutoRegressive(Trainer):
+    """
+    Trainer for autoregressive VideoARTransformer (target -- obj)
+    """
+    def __init__(self, model, evaluate,
+                 optimizer=None, criterion=None, scheduler=None,
+                 experiment_name: str = 'ar_model',
+                 save_model=None):
+        super().__init__(model, evaluate, optimizer, criterion, scheduler,
+                         experiment_name, save_model if save_model else save_model_default)
+
+    def train_one_step(self, inputs, iter_):
+        """
+        tbd
+
+        """
+        self.model.train()
+        self.optimizer.zero_grad()
+        log_pred_freq = 500
+        context, future = (inputs[0][:, :5], inputs[1][:, :5]), inputs[0][:, 5:] #not (inputs[0][:, 5:], inputs[0][:, 5:]) for future
+        steps = 5
+        preds = []
+        cur_context = (context[0].clone(), context[1].clone())
+        for t in range(steps):
+            print(cur_context[0].shape, cur_context[1].shape)
+            out = self.model(cur_context)          # ([B, T, C, H, W)], [B, T, H, W)]) of (frames, masks)
+            next_frame = out[0][:, -1]
+            next_mask = out[1][:, -1]
+            preds.append(next_frame.unsqueeze(1))  # (B, 1, C, H, W)
+
+            if iter_ % log_pred_freq == 0:
+                with torch.no_grad():
+                    self._log_predictions_next5(inputs, iter_)
+                
+            # обновляем контекст
+            cur_context = (torch.cat([cur_context[0][:, 1:], next_frame.unsqueeze(1)], dim=1),
+                           torch.cat([cur_context[1][:, 1:], next_mask.unsqueeze(1)],  dim=1))
+
+        
+        preds = torch.cat(preds, dim=1)  # (B, 5, C, H, W)
+        loss = self.criterion(preds, future)
+        loss.backward()
+        self.optimizer.step()
+
+        loss_item = loss.detach().cpu().item()
+        del preds, future, cur_context, loss
+
+        return loss_item
+
+    def _log_predictions(self, batch, iter_):
+        frames, masks = batch
+        # берём первый элемент батча для наглядности
+        context = (frames[0:1, :5], masks[0:1, :5])   # ([1,5,C,H,W], [1,5,H,W])
+        future_f = frames[0:1, 5:20]                  # [1,15,C,H,W]   (если у вас 15 future)
+        future_m = masks[0:1,  5:20]                  # [1,15,H,W]
+    
+        preds_f, preds_m = [], []
+        cur_context = (context[0].clone(), context[1].clone())
+    
+        self.model.eval()
+        with torch.no_grad():
+            for _ in range(future_f.size(1)):
+                out_f, out_m = self.model(cur_context)       # ([1,5,C,H,W], [1,5,H,W])
+                next_f = out_f[:, -1]                        # [1,C,H,W]
+                next_m = out_m[:, -1]                        # [1,H,W]
+                preds_f.append(next_f.unsqueeze(1))          # [1,1,C,H,W]
+                preds_m.append(next_m.unsqueeze(1))          # [1,1,H,W]
+                # autoregressive update
+                cur_context = (
+                    torch.cat([cur_context[0][:, 1:], next_f.unsqueeze(1)], dim=1),
+                    torch.cat([cur_context[1][:, 1:], next_m.unsqueeze(1)], dim=1),
+                )
+    
+        preds_f = torch.cat(preds_f, dim=1)[0]  # [15,C,H,W]
+        preds_m = torch.cat(preds_m, dim=1)[0]  # [15,H,W]
+        ctx_f, fut_f = context[0][0], future_f[0]  # [5,C,H,W], [15,C,H,W]
+        ctx_m, fut_m = context[1][0], future_m[0]  # [5,H,W],   [15,H,W]
+    
+        # ---- Рисуем КАДРЫ (как раньше) ----
+        draw_rollout_grid(ctx_f, fut_f, preds_f, self.writer, self.dir_imgs, iter_, mode='val')
+    
+        # ---- Рисуем МАСКИ (цветные) ----
+        ctx_m_rgb  = masks_to_rgb_tensor(ctx_m)   # [5,3,H,W]
+        fut_m_rgb  = masks_to_rgb_tensor(fut_m)   # [15,3,H,W]
+        preds_m_rgb= masks_to_rgb_tensor(preds_m) # [15,3,H,W]
+        draw_rollout_grid(ctx_m_rgb, fut_m_rgb, preds_m_rgb, self.writer, self.dir_imgs, iter_, mode='val_masks')
+    
+        # ---- GIF по кадрам ----
+        scale = 4
+        seq_for_gif = torch.cat([ctx_f, preds_f], dim=0).clamp(0,1)   # [T, C, H, W]
+        seq_np = (seq_for_gif * 255).byte().cpu().permute(0,2,3,1).numpy()
+        images = []
+        for f in seq_np:
+            img = Image.fromarray(f)
+            if scale != 1.0:
+                w, h = img.size
+                img = img.resize((int(w*scale), int(h*scale)), Image.NEAREST)
+            images.append(img)
+        gif_path = os.path.join(self.dir_imgs, f"rollout_val_{iter_:06d}.gif")
+        imageio.mimsave(gif_path, images, fps=5)
+    
+        # ---- GIF по маскам (цветные) ----
+        seq_m_np = (torch.cat([ctx_m_rgb, preds_m_rgb], dim=0)
+                    .clamp(0,1).mul(255).byte().cpu().permute(0,2,3,1).numpy())
+        images_m = []
+        for f in seq_m_np:
+            img = Image.fromarray(f)
+            if scale != 1.0:
+                w, h = img.size
+                img = img.resize((int(w*scale), int(h*scale)), Image.NEAREST)
+            images_m.append(img)
+        gif_path_m = os.path.join(self.dir_imgs, f"rollout_val_masks_{iter_:06d}.gif")
+        imageio.mimsave(gif_path_m, images_m, fps=5)
+
+    def _log_predictions_next5(self, batch, iter_, step=None):
+        frames, masks = batch
+        context = (frames[0:1, :5], masks[0:1, :5])  # ([1,5,C,H,W], [1,5,H,W])
+        future_f = frames[0:1, 5:10]                 # [1,5,C,H,W]
+        future_m = masks[0:1,  5:10]                 # [1,5,H,W]
+    
+        preds_f, preds_m = [], []
+        cur_context = (context[0].clone(), context[1].clone())
+    
+        self.model.eval()
+        with torch.no_grad():
+            for t in range(5):
+                out_f, out_m = self.model(cur_context)      # ([1,5,C,H,W], [1,5,H,W])
+                next_f = out_f[:, -1]                       # [1,C,H,W]
+                next_m = out_m[:, -1]                       # [1,H,W]
+                preds_f.append(next_f.unsqueeze(1))
+                preds_m.append(next_m.unsqueeze(1))
+    
+                # по-кадровый лог (frames)
+                draw_rollout_grid(
+                    cur_context[0][0],                      # ctx frames: [5,C,H,W]
+                    future_f[0, t, :].unsqueeze(0),        # gt frame:   [1,C,H,W]
+                    next_f,                                 # pred frame: [1,C,H,W]
+                    self.writer, self.dir_imgs, iter_, mode=f"train_step{t:02d}"
+                )
+                # по-кадровый лог (masks)
+                draw_rollout_grid(
+                    masks_to_rgb_tensor(cur_context[1][0]),               # [5,3,H,W]
+                    masks_to_rgb_tensor(future_m[0, t, ...].unsqueeze(0)),# [1,3,H,W]
+                    masks_to_rgb_tensor(next_m.squeeze(0)),               # [1,3,H,W]
+                    self.writer, self.dir_imgs, iter_, mode=f"train_masks_step{t:02d}"
+                )
+    
+                # autoregressive update
+                cur_context = (
+                    torch.cat([cur_context[0][:, 1:], next_f.unsqueeze(1)], dim=1),
+                    torch.cat([cur_context[1][:, 1:], next_m.unsqueeze(1)], dim=1),
+                )
+    
+        preds_f = torch.cat(preds_f, dim=1)[0]  # [5,C,H,W]
+        preds_m = torch.cat(preds_m, dim=1)[0]  # [5,H,W]
+        ctx_f, fut_f = context[0][0], future_f[0]
+        ctx_m, fut_m = context[1][0], future_m[0]
+    
+        # итоговые гриды: frames + masks
+        draw_rollout_grid(ctx_f, fut_f, preds_f, self.writer, self.dir_imgs, iter_, mode='train')
+        draw_rollout_grid(masks_to_rgb_tensor(ctx_m),
+                          masks_to_rgb_tensor(fut_m),
+                          masks_to_rgb_tensor(preds_m),
+                          self.writer, self.dir_imgs, iter_, mode='train_masks')
+    
+        # GIF: frames
+        scale = 4
+        seq_np = (torch.cat([ctx_f, preds_f], dim=0).clamp(0,1)*255).byte().cpu().permute(0,2,3,1).numpy()
+        images = []
+        for f in seq_np:
+            img = Image.fromarray(f)
+            if scale != 1.0:
+                w, h = img.size
+                img = img.resize((int(w*scale), int(h*scale)), Image.NEAREST)
+            images.append(img)
+        gif_path = os.path.join(self.dir_imgs, f"rollout_train_{iter_:06d}.gif")
+        imageio.mimsave(gif_path, images, fps=5)
+    
+        # GIF: masks
+        seq_m_np = (torch.cat([masks_to_rgb_tensor(ctx_m), masks_to_rgb_tensor(preds_m)], dim=0)
+                    .clamp(0,1).mul(255).byte().cpu().permute(0,2,3,1).numpy())
+        images_m = []
+        for f in seq_m_np:
+            img = Image.fromarray(f)
+            if scale != 1.0:
+                w, h = img.size
+                img = img.resize((int(w*scale), int(h*scale)), Image.NEAREST)
+            images_m.append(img)
+        gif_path_m = os.path.join(self.dir_imgs, f"rollout_train_masks_{iter_:06d}.gif")
+        imageio.mimsave(gif_path_m, images_m, fps=5)
