@@ -1,6 +1,5 @@
 # experiment outputs
 experiments/
-experiments_released/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

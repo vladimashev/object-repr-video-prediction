@@ -189,8 +189,13 @@ class Trainer:
                         with torch.no_grad():
                             self.model.eval()
                             recon = self.model(batch)
+
+                            if isinstance(recon, (tuple, list)):
+                                recon = recon[0]
+
                             if recon.ndim == 5:
                                 recon = recon[:, 0] # take batch with T=1 for logging
+
                             grid = torchvision.utils.make_grid(recon.detach().cpu())
                             self.writer.add_image('Images/Train', grid, global_step=iter_)
                             torchvision.utils.save_image(grid, os.path.join(self.dir_imgs, f"imgs_{iter_}.png"))
@@ -202,16 +207,17 @@ class Trainer:
                 else:
                     self._log_to_csv(train_metrics, csv_headers)
 
-                # SAVE SNAPSHOT
-                # ! too costly feature
-                # if (iter_ > 0) and (iter_ % SAVE_FREQUENCY == 0):
-                #     finished_epoch = (iter_+1) // total_batches
-                #     self.save_model(self.model, self.optimizer, self.scheduler,
-                #                stats={ "epoch": finished_epoch, "iter_": iter_+1 },
-                #                save_path=self.dir_checkpoints,
-                #                model_name=f"epoch_{finished_epoch:03d}_iter_{iter_+1:05d}")
                 
                 iter_ = iter_ + 1
+
+            # SAVE SNAPSHOT
+            # ! too costly feature
+            finished_epoch = (iter_) // total_batches
+            if (finished_epoch > 0) and (finished_epoch % SAVE_FREQUENCY == 0):
+                self.save_model(self.model, self.optimizer, self.scheduler,
+                            stats={ "epoch": finished_epoch, "iter_": iter_ },
+                            save_path=self.dir_checkpoints,
+                            model_name=f"epoch_{finished_epoch:03d}_iter_{iter_:05d}")
             
             if self.scheduler: self.scheduler.step(mean_loss)
 

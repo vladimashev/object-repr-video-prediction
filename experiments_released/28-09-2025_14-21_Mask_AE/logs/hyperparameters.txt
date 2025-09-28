@@ -1,0 +1,8 @@
+epochs=20, batch_size=64, learning_rate=0.0001, start_step=0
+
+```
+autoencoder_obj = MaskedObjectTransformer(obj_num=11, embed_dim=512,
+                                          img_size=64, enc_depth=3,
+                                          nhead=8, mlp_ratio=4.0)
+```
+Loss: img_loss + .5 * mask_loss

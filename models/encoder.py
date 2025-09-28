@@ -94,27 +94,25 @@ class SlotTransformerEncoder(nn.Module):
         imgs, masks = item
         B, T, C, H, W = imgs.shape
         K = self.num_slots
+        masks = masks.unsqueeze(2)  # [B, T, 1, H, W]
 
         objs_all = []
         for t in range(T):
             objs_t = []
             for k in range(K):
-                mask_k = (masks[:, t] == k).unsqueeze(1)    # [B,1,H,W] boolean
+                mask_k = (masks[:, t] == k)          # [B,1,H,W] boolean
                 objs_t.append(imgs[:, t] * mask_k.float())  # [B,C,H,W]
-            objs_t = torch.stack(objs_t, dim=1)             # [B,K,C,H,W]
+            objs_t = torch.stack(objs_t, dim=1)     # [B,K,C,H,W]
             objs_all.append(objs_t)
-        objs = torch.stack(objs_all, dim=1)                 # [B,T,K,C,H,W]
+        objs = torch.stack(objs_all, dim=1)         # [B,T,K,C,H,W]
 
-        z = self.encoder_cnn(objs.view(B*T*K, C, H, W))
+        z = self.encoder_cnn(objs.view(B*T*K,C,H,W))
         slot_embeddings = z.view(B, T, K, -1)
         
         z_refined = []
         for t in range(T):
             z_refined_t = self.encoder(slot_embeddings[:, t, :, :])    # [B,K,D]
             z_refined.append(z_refined_t)
-        z_refined = torch.stack(z_refined, dim=1)                      # [B,T,K,D]
-        # print(z_refined.shape)
+        z_refined = torch.stack(z_refined, dim=1)        # [B,T,K,D]
 
         return z_refined
-
-    
