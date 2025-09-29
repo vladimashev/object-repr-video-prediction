@@ -81,7 +81,7 @@ class TransformerBlock(nn.Module):
 
 
 class SpatialTemporalBlock(nn.Module):
-    def __init__(self, token_dim, attn_dim, num_heads, mlp_size, grid, max_len, causal=True, target='rgb'):
+    def __init__(self, token_dim, attn_dim, num_heads, mlp_size, grid, max_len, causal=False, target='rgb'):
         super().__init__()
         self.causal = causal
         self.spatial_pe = PositionalEncoding2D(token_dim, grid) if target=='rgb' else None
@@ -102,20 +102,14 @@ class SpatialTemporalBlock(nn.Module):
 
     @staticmethod
     def build_causal_mask(T: int, Np: int, device: torch.device):
-        # time causal-mask [T, T]
-        time_mask = torch.triu(torch.ones(T, T), diagonal=1).bool()
-        # repeat Np times
-        mask = torch.block_diag(*([time_mask] * Np))
-        return mask.to(device)
-    # def build_causal_mask(T: int, Np: int, device: torch.device):
-    #     """
-    #     Build causal mask for T axis
-    #     """
-    #     time_mask = torch.triu(torch.ones(T, T), diagonal=1).bool() # [T, T]
-    #     mask = time_mask.repeat_interleave(Np, dim=0).repeat_interleave(Np, dim=1) # [T*Np, T*Np], all patches can attent to one another
-    #     return mask.to(device)
+        # один временной блок (T,T), без разнесения по патчам
+        t = torch.arange(T, device=device)
+        delta = t.unsqueeze(1) - t.unsqueeze(0)   # i - j
+        allowed = (delta >= 0) & (delta <= 5)     # видеть только 5 предыдущих и себя
+        time_mask = ~allowed                      # True = запретить
+        return time_mask
 
-    def forward(self, x, target='rgb'):
+    def forward(self, x, target='rgb', causal=False):
         """
         x: (B, T, Np, D)
 
@@ -141,7 +135,10 @@ class SpatialTemporalBlock(nn.Module):
         xt = self.temporal_pe(xs)
         xt = xt.reshape(B, T, Np, D).transpose(1, 2).reshape(B * Np, T, D)
         xt = self.ln_temporal(xt)
-        xt = self.attn_temporal(xt)
+        mask = None
+        if causal:
+            mask = build_causal_mask(T, Np, xt.device)
+        xt = self.attn_temporal(xt, attn_mask=mask)
         #xt = self.dropout(xt)
         xt = xt.reshape(B, Np, T, D).transpose(1, 2).reshape(B, T*Np, D)
         xt = xt + xs

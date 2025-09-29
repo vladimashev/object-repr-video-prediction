@@ -7,6 +7,17 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 from lpips import LPIPS
 
 
+def to_uint8_np(tensor):
+    t = tensor.detach().cpu().float()
+    if t.max() > 1.1:
+        # assume already 0-255
+        t = torch.clamp(t, 0.0, 255.0)
+        arr = t.byte().numpy()
+    else:
+        t = torch.clamp(t, 0.0, 1.0)
+        arr = (t * 255.0).byte().numpy()
+    return arr  # dtype=uint8
+
 @torch.no_grad()
 def evaluate_autoencoder(model, dataloader, device='cuda', lpips_net='alex'):
     device = torch.device(device)
@@ -61,18 +72,6 @@ def evaluate_autoencoder(model, dataloader, device='cuda', lpips_net='alex'):
         
         B, T, C, H, W = imgs.shape
 
-        # skimage expects HxWxC in uint8
-        def to_uint8_np(tensor):
-            t = tensor.detach().cpu().float()
-            if t.max() > 1.1:
-                # assume already 0-255
-                t = torch.clamp(t, 0.0, 255.0)
-                arr = t.byte().numpy()
-            else:
-                t = torch.clamp(t, 0.0, 1.0)
-                arr = (t * 255.0).byte().numpy()
-            return arr  # dtype=uint8
-
         # For LPIPS, need [-1,1] float32 torch tensors
         def to_lpips_tensor(tensor):
             t = tensor.detach().to(device).float()
@@ -117,8 +116,8 @@ def evaluate_autoencoder(model, dataloader, device='cuda', lpips_net='alex'):
                 total_frames += 1
 
         # collect sequences for FVD
-        real_np = imgs_uint8.copy().astype(np.uint8)
-        gen_np = recon_uint8.copy().astype(np.uint8)
+        real_np = imgs_uint8.copy().astype(np.uint8) # зачем?
+        gen_np = recon_uint8.copy().astype(np.uint8) # зачем?
         real_np = real_np.astype(np.float32)
         gen_np = gen_np.astype(np.float32)
         real_sequences.append(real_np)
@@ -177,6 +176,9 @@ def evaluate_ar_transformer(model, dataloader, device, steps=15):
     total_lpips = 0.0
     count = 0
 
+    real_sequences = []
+    gen_sequences = []
+
     for _, batch in enumerate(dataloader):
         # ---- распаковка батча ----
         if isinstance(batch, (list, tuple)) and len(batch) == 2:
@@ -203,7 +205,7 @@ def evaluate_ar_transformer(model, dataloader, device, steps=15):
         for _ in range(steps):
             if cur_context[1] is not None:
                 # модель возвращает (pred_frames, pred_masks)
-                out_f, out_m = model(cur_context)       # ([B,5,C,H,W], [B,5,H,W])
+                out_f, out_m, _ = model(cur_context)       # ([B,5,C,H,W], [B,5,H,W])
                 next_f = out_f[:, -1]                   # [B,C,H,W]
                 next_m = out_m[:, -1]                   # [B,H,W]
                 # обновляем контекст (сдвиг окна по времени)
@@ -225,6 +227,9 @@ def evaluate_ar_transformer(model, dataloader, device, steps=15):
         loss = criterion(preds, future_f)
         total_loss += loss.item()
 
+        imgs_uint8 = to_uint8_np(future_f)
+        recon_uint8 = to_uint8_np(preds)
+        
         for j in range(B):
             for t in range(steps):
                 x = future_f[j, t].detach().cpu().numpy().transpose(1, 2, 0)  # [H,W,C]
@@ -243,17 +248,40 @@ def evaluate_ar_transformer(model, dataloader, device, steps=15):
 
                 count += 1
 
+        # for FVD
+        real_np = imgs_uint8.astype(np.float32)
+        gen_np = recon_uint8.astype(np.float32)
+        real_sequences.append(real_np)
+        gen_sequences.append(gen_np)
+        
     # усреднение
     avg_loss  = total_loss / max(len(dataloader), 1)
     avg_ssim  = total_ssim / max(count, 1)
     avg_psnr  = total_psnr / max(count, 1)
     avg_lpips = total_lpips / max(count, 1)
 
+
+    # real_sequences  [_, B, T, C, H, W]
+    # [[video1], [video2]] -> [video1, video2]
+    # [[gt1], [gt2]] ->       [gt1,     gt2]
+    real_all = np.concatenate(real_sequences, axis=0)  # [B, T, C, H, W]
+    gen_all = np.concatenate(gen_sequences, axis=0)
+
+    # execute_default_fvd expects frames array shape [B, T, C, H, W], accepts torch or numpy.
+    # pass device string
+    try:
+        fvd_value = execute_default_fvd(real_all, gen_all, device=str(device))
+    except Exception as e:
+        # If FVD computation fails, return None but don't crash
+        fvd_value = None
+        print(f"Warning: FVD computation failed: {e}")
+        
     return {
         "Loss":  avg_loss,
         "SSIM":  avg_ssim,
         "PSNR":  avg_psnr,
         "LPIPS": avg_lpips,
+        "FVD": float(fvd_value) if fvd_value is not None else -1
     }
 
 # @torch.no_grad()
