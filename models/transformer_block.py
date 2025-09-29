@@ -101,7 +101,7 @@ class SpatialTemporalBlock(nn.Module):
         self.mlp_temporal = MLP(token_dim, mlp_size)
 
     @staticmethod
-    def build_causal_mask(T: int, Np: int, device: torch.device):
+    def build_causal_mask(T: int, device: torch.device):
         # один временной блок (T,T), без разнесения по патчам
         t = torch.arange(T, device=device)
         delta = t.unsqueeze(1) - t.unsqueeze(0)   # i - j
@@ -109,7 +109,7 @@ class SpatialTemporalBlock(nn.Module):
         time_mask = ~allowed                      # True = запретить
         return time_mask
 
-    def forward(self, x, target='rgb', causal=False):
+    def forward(self, x, target='rgb', causal=True):
         """
         x: (B, T, Np, D)
 
@@ -137,7 +137,7 @@ class SpatialTemporalBlock(nn.Module):
         xt = self.ln_temporal(xt)
         mask = None
         if causal:
-            mask = build_causal_mask(T, Np, xt.device)
+            mask = self.build_causal_mask(T, xt.device)
         xt = self.attn_temporal(xt, attn_mask=mask)
         #xt = self.dropout(xt)
         xt = xt.reshape(B, Np, T, D).transpose(1, 2).reshape(B, T*Np, D)

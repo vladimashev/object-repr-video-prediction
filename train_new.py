@@ -319,10 +319,10 @@ class TrainerRGBTeacherForce(Trainer):
         gif_path = os.path.join(self.dir_imgs, f"rollout_{iter_:06d}.gif")
         imageio.mimsave(gif_path, images, fps=5)
 
-
+# ========================= Training of Object Based Predictor in Teacher Force manner =========================
 class TrainerObjTeacherForce(Trainer):
     """
-    Trainer for autoregressive VideoARTransformer (target -- rgb)
+    Trainer for autoregressive VideoARTransformer (target -- obj)
     (teacher forcing)
     """
     def __init__(self, model, evaluate,
@@ -332,7 +332,7 @@ class TrainerObjTeacherForce(Trainer):
         super().__init__(model, evaluate, optimizer, criterion, scheduler,
                          experiment_name, save_model if save_model else save_model_default)
 
-    def train_one_step(self, inputs):
+    def train_one_step(self, inputs, iter_):
         """
         batch 
           input  -> (B, 9, C, H, W)  (teacher-forced)
@@ -346,18 +346,20 @@ class TrainerObjTeacherForce(Trainer):
         self.model.train()
         self.optimizer.zero_grad()
 
-        outputs = self.model(inputs[:, :-1, ...].contiguous())  # (B, 9, C, H, W) predictions for frames [6..10] at positions [5..9]
+        outputs = self.model((inputs[0][:, :-1, ...], inputs[1][:, :-1, ...]))
 
         # take the last 5 frames from outputs (positions [5..9] → predictions for [6..10])
-        preds_last5 = outputs[:, -5:] # (B, 5, C, H, W)
-        targets_last5 = inputs[:, -5:] # (B, 5, C, H, W)
+        preds_last5 = outputs[0][:, -5:] # (B, 5, C, H, W)
+        preds_masks5_logits = outputs[2][:, -5:]
+        targets_last5 = inputs[0][:, -5:] # (B, 5, C, H, W)
+        targets_last5_masks = inputs[1][:, -5:]
 
-        loss = self.criterion(preds_last5, targets_last5)
+        loss = self.criterion((preds_last5, preds_masks5_logits), (targets_last5, targets_last5_masks))
         loss.backward()
         self.optimizer.step()
 
         loss_item = loss.detach().cpu().item()
-        del outputs, preds_last5, targets_last5, loss
+        del outputs, preds_last5, preds_masks5_logits, targets_last5, targets_last5_masks, loss
 
         return loss_item
 
@@ -503,6 +505,7 @@ class TrainerObjTeacherForce(Trainer):
         gif_path_m = os.path.join(self.dir_imgs, f"rollout_train_masks_{iter_:06d}.gif")
         imageio.mimsave(gif_path_m, images_m, fps=5)
 
+# ========================= Training of RGB Based Predictor in AutoRegressive manner =========================
 
 class TrainerAutoRegressive(Trainer):
     """
@@ -639,6 +642,7 @@ class TrainerAutoRegressive(Trainer):
         gif_path = os.path.join(self.dir_imgs, f"rollout_train_{iter_:06d}.gif")
         imageio.mimsave(gif_path, images, fps=5)
 
+# ========================= Training of RGB Based Predictor in AutoRegressive manner =========================
 
 class TrainerObjAutoRegressive(Trainer):
     """

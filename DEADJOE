@@ -1,0 +1,21 @@
+
+*** These modified files were found in JOE when it aborted on Mon Sep 29 18:58:21 2025
+*** JOE was aborted by UNIX signal 1
+
+*** File '(Unnamed)'
+/home/user/imashevv1/object-repr-video-prediction/.git/MERGE_MSG
+
+*** File '/home/user/imashevv1/object-repr-video-prediction/.git/MERGE_MSG'
+
+Merge remote-tracking branch 'origin/dev' into dev
+# Please enter a commit message to explain why this merge is necessary,
+# especially if it merges an updated upstream into a topic branch.
+#
+# Lines starting with '#' will be ignored, and an empty message aborts
+# the commit.
+
+*** File '* Startup Log *'
+Processing '/etc/joe/editorrc'...
+Processing '/etc/joe/ftyperc'...
+Finished processing /etc/joe/ftyperc
+Finished processing /etc/joe/editorrc
