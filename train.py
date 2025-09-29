@@ -195,7 +195,6 @@ class Trainer:
 
                             if recon.ndim == 5:
                                 recon = recon[:, 0] # take batch with T=1 for logging
-
                             grid = torchvision.utils.make_grid(recon.detach().cpu())
                             self.writer.add_image('Images/Train', grid, global_step=iter_)
                             torchvision.utils.save_image(grid, os.path.join(self.dir_imgs, f"imgs_{iter_}.png"))
