@@ -507,7 +507,7 @@ class TrainerObjTeacherForce(Trainer):
 
 # ========================= Training of RGB Based Predictor in AutoRegressive manner =========================
 
-class TrainerAutoRegressive(Trainer):
+class TrainerRGBAutoRegressive(Trainer):
     """
     Trainer for autoregressive VideoARTransformer (target -- rgb)
     """
