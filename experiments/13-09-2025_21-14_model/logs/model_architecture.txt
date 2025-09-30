@@ -1,0 +1,154 @@
+ImageAutoencoder(
+  (encoder): ViTPatchEncoder(
+    (patch_projection): Sequential(
+      (0): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+      (1): Linear(in_features=768, out_features=256, bias=True)
+    )
+    (pos_emb): PositionalEncoding()
+    (transformer_blocks): Sequential(
+      (0): TransformerBlock(
+        (ln_att): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (attn): MultiHeadSelfAttention(
+          (q): Linear(in_features=256, out_features=128, bias=False)
+          (k): Linear(in_features=256, out_features=128, bias=False)
+          (v): Linear(in_features=256, out_features=128, bias=False)
+          (out_proj): Linear(in_features=128, out_features=256, bias=False)
+        )
+        (ln_mlp): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (mlp): MLP(
+          (mlp): Sequential(
+            (0): Linear(in_features=256, out_features=512, bias=True)
+            (1): GELU(approximate='none')
+            (2): Linear(in_features=512, out_features=256, bias=True)
+          )
+        )
+      )
+      (1): TransformerBlock(
+        (ln_att): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (attn): MultiHeadSelfAttention(
+          (q): Linear(in_features=256, out_features=128, bias=False)
+          (k): Linear(in_features=256, out_features=128, bias=False)
+          (v): Linear(in_features=256, out_features=128, bias=False)
+          (out_proj): Linear(in_features=128, out_features=256, bias=False)
+        )
+        (ln_mlp): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (mlp): MLP(
+          (mlp): Sequential(
+            (0): Linear(in_features=256, out_features=512, bias=True)
+            (1): GELU(approximate='none')
+            (2): Linear(in_features=512, out_features=256, bias=True)
+          )
+        )
+      )
+      (2): TransformerBlock(
+        (ln_att): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (attn): MultiHeadSelfAttention(
+          (q): Linear(in_features=256, out_features=128, bias=False)
+          (k): Linear(in_features=256, out_features=128, bias=False)
+          (v): Linear(in_features=256, out_features=128, bias=False)
+          (out_proj): Linear(in_features=128, out_features=256, bias=False)
+        )
+        (ln_mlp): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (mlp): MLP(
+          (mlp): Sequential(
+            (0): Linear(in_features=256, out_features=512, bias=True)
+            (1): GELU(approximate='none')
+            (2): Linear(in_features=512, out_features=256, bias=True)
+          )
+        )
+      )
+      (3): TransformerBlock(
+        (ln_att): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (attn): MultiHeadSelfAttention(
+          (q): Linear(in_features=256, out_features=128, bias=False)
+          (k): Linear(in_features=256, out_features=128, bias=False)
+          (v): Linear(in_features=256, out_features=128, bias=False)
+          (out_proj): Linear(in_features=128, out_features=256, bias=False)
+        )
+        (ln_mlp): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (mlp): MLP(
+          (mlp): Sequential(
+            (0): Linear(in_features=256, out_features=512, bias=True)
+            (1): GELU(approximate='none')
+            (2): Linear(in_features=512, out_features=256, bias=True)
+          )
+        )
+      )
+    )
+  )
+  (decoder): ViTPatchDecoder(
+    (input_norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+    (pos_emb): PositionalEncoding()
+    (transformer_blocks): Sequential(
+      (0): TransformerBlock(
+        (ln_att): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (attn): MultiHeadSelfAttention(
+          (q): Linear(in_features=256, out_features=128, bias=False)
+          (k): Linear(in_features=256, out_features=128, bias=False)
+          (v): Linear(in_features=256, out_features=128, bias=False)
+          (out_proj): Linear(in_features=128, out_features=256, bias=False)
+        )
+        (ln_mlp): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (mlp): MLP(
+          (mlp): Sequential(
+            (0): Linear(in_features=256, out_features=512, bias=True)
+            (1): GELU(approximate='none')
+            (2): Linear(in_features=512, out_features=256, bias=True)
+          )
+        )
+      )
+      (1): TransformerBlock(
+        (ln_att): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (attn): MultiHeadSelfAttention(
+          (q): Linear(in_features=256, out_features=128, bias=False)
+          (k): Linear(in_features=256, out_features=128, bias=False)
+          (v): Linear(in_features=256, out_features=128, bias=False)
+          (out_proj): Linear(in_features=128, out_features=256, bias=False)
+        )
+        (ln_mlp): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (mlp): MLP(
+          (mlp): Sequential(
+            (0): Linear(in_features=256, out_features=512, bias=True)
+            (1): GELU(approximate='none')
+            (2): Linear(in_features=512, out_features=256, bias=True)
+          )
+        )
+      )
+      (2): TransformerBlock(
+        (ln_att): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (attn): MultiHeadSelfAttention(
+          (q): Linear(in_features=256, out_features=128, bias=False)
+          (k): Linear(in_features=256, out_features=128, bias=False)
+          (v): Linear(in_features=256, out_features=128, bias=False)
+          (out_proj): Linear(in_features=128, out_features=256, bias=False)
+        )
+        (ln_mlp): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (mlp): MLP(
+          (mlp): Sequential(
+            (0): Linear(in_features=256, out_features=512, bias=True)
+            (1): GELU(approximate='none')
+            (2): Linear(in_features=512, out_features=256, bias=True)
+          )
+        )
+      )
+      (3): TransformerBlock(
+        (ln_att): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (attn): MultiHeadSelfAttention(
+          (q): Linear(in_features=256, out_features=128, bias=False)
+          (k): Linear(in_features=256, out_features=128, bias=False)
+          (v): Linear(in_features=256, out_features=128, bias=False)
+          (out_proj): Linear(in_features=128, out_features=256, bias=False)
+        )
+        (ln_mlp): LayerNorm((256,), eps=1e-06, elementwise_affine=True)
+        (mlp): MLP(
+          (mlp): Sequential(
+            (0): Linear(in_features=256, out_features=512, bias=True)
+            (1): GELU(approximate='none')
+            (2): Linear(in_features=512, out_features=256, bias=True)
+          )
+        )
+      )
+    )
+    (to_patch): Linear(in_features=256, out_features=768, bias=True)
+  )
+)

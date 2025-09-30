@@ -1,0 +1,21 @@
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.2.0
+torchvision==0.17.0
+torchmetrics>=1.3.0
+tensorboard
+notebook
+
+numpy<2
+pandas
+matplotlib
+scikit-learn
+scipy
+opencv-python
+scikit_image
+
+tqdm
+
+pytorch_fid
+lpips
+
+networkx<3.0

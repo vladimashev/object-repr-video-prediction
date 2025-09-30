@@ -1,3 +1,11 @@
+# experiment outputs
+experiments/
+experiments_released/21-09-2025_12-31_Mask_AE/
+experiments_released/22-09-2025_11-45_Mask_AE/
+experiments_released/22-09-2025_20-39_Patch_AE/
+experiments_released/22-09-2025_23-34_TransformerPatch_AE/
+cached_plots/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -205,3 +213,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+experiments/
+DEADJOE
+DEADJOE
