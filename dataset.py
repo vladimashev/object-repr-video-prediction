@@ -139,36 +139,6 @@ class MOViC_Dataset(Dataset):
     def __len__(self):
         return len(self.sequences)
 
-    # def __getitem__(self, idx):
-    #     frame_paths = self.sequences[idx]
-    #     mask_paths = self.masks[idx] if self.target == 'objects' else None
-
-    #     if self.split == 'train': # subsample when training
-    #         total = len(frame_paths)
-    #         max_start = total - (self.input_frames + self.target_frames)
-    #         start_idx = random.randint(0, max_start)
-    #     elif self.split == 'validation': # no subsampling
-    #         start_idx = 0
-
-    #     frames, masks = None, None
-    #     paths = frame_paths[start_idx : start_idx + self.input_frames + self.target_frames]
-    #     frames = torch.stack([self._load_image(path) for path in paths])  # [T, C, H, W]
-    #     frames = self.resizer_rgb(frames)
-            
-    #     if self.target == 'objects': # masks are stored as tensors
-    #         masks = torch.stack(mask_paths[start_idx : start_idx + self.input_frames + self.target_frames])  # [T, C, H, W]
-    #         masks = self.resizer_mask(masks)
-
-    #     if self.split == 'train':
-    #         frames, masks = self.transform(frames, masks)
-
-    #     if masks is None:
-    #         return frames
-    #     else:
-    #         # list of form [(frame, mask), ...]
-    #         return [(f, m) for f, m in zip(frames, masks)]
-
-            
     def __getitem__(self, idx):
         frame_paths = self.sequences[idx]
         mask_paths = self.masks[idx] if self.target == 'objects' else None
