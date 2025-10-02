@@ -108,7 +108,8 @@ def draw_rollout_grid(ctx_seq, fut_seq, pred_seq, writer, dir_imgs, iter_, mode=
     # в TensorBoard и файл
     suffix = "final" if step is None else f"{step}"
     grid_tensor = ToTensor()(canvas)  # [C, H, W] в [0,1]
-    writer.add_image("Sequences/rollout/train", grid_tensor, global_step=iter_)
+    if writer:
+        writer.add_image("Sequences/rollout/train", grid_tensor, global_step=iter_)
     os.makedirs(dir_imgs, exist_ok=True)
     torchvision.utils.save_image(grid_tensor, os.path.join(dir_imgs, f"rollout_{mode}_{iter_:06d}_{suffix}.png"))
 
