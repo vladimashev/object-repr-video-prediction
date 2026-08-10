@@ -108,8 +108,6 @@ Main observations:
   </tr>
 </table>
 
----
-
 ### Teacher-Forcing Rollout
 
 <table>
@@ -120,31 +118,13 @@ Main observations:
   </tr>
   <tr>
     <td align="center">
-      <img src="assets/rollout_tf_gt.gif" alt="Ground-truth sequence" width="280">
+      <img src="results/Pred_RGB_AR/validation_000008/rollout_gt_000000.gif" alt="Ground-truth sequence" width="280">
     </td>
     <td align="center">
-      <img src="assets/rollout_tf_patch.gif" alt="Teacher-Forcing rollout with patch representation" width="280">
+      <img src="results/Pred_RGB_TF/validation_000008/rollout_val_000000.gif" alt="Teacher-Forcing rollout with patch representation" width="280">
     </td>
     <td align="center">
-      <img src="assets/rollout_tf_obj.gif" alt="Teacher-Forcing rollout with object-centric representation" width="280">
-    </td>
-  </tr>
-</table>
-
----
-### Teacher-Forcing Rollout
-
-<table>
-  <tr>
-    <th align="center">Patch Representation</th>
-    <th align="center">Object-Centric Representation</th>
-  </tr>
-  <tr>
-    <td align="center">
-      <img src="assets/rollout_tf_patch.gif" alt="Teacher-Forcing rollout with patch representation" width="320">
-    </td>
-    <td align="center">
-      <img src="assets/rollout_tf_obj.gif" alt="Teacher-Forcing rollout with object-centric representation" width="320">
+      <img src="results/Pred_Obj_TF/validation_000008/rollout_val_000000.gif" alt="Teacher-Forcing rollout with object-centric representation" width="280">
     </td>
   </tr>
 </table>
