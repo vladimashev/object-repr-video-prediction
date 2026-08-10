@@ -25,7 +25,7 @@ We compare:
 
 ### Patch-based Autoencoder
 
-Frames are split into patches, encoded as Transformer tokens, and reconstructed with a ViT-style decoder.
+Frames are split into patches, encoded as Transformer tokens and reconstructed with a ViT-style decoder.
 
 <!-- Architecture figure: Patch-based Autoencoder -->
 <p align="center">
@@ -34,7 +34,7 @@ Frames are split into patches, encoded as Transformer tokens, and reconstructed 
 
 ### Object-centric Autoencoder
 
-Instance masks isolate individual objects. Each object is encoded into a slot representation, refined with self-attention, and decoded back into the full frame.
+Instance masks isolate individual objects. Each object is encoded into a slot representation, refined with self-attention and decoded back into the full frame.
 
 <!-- Architecture figure: Object-centric Autoencoder -->
 <p align="center">
@@ -58,35 +58,69 @@ Experiments are performed on **MOVi-C**, a synthetic object-centric video datase
 
 For this project, RGB frames are used by both approaches, while instance segmentation masks are additionally used by the object-centric model.
 
----
-
 ## Results
 
-The best reconstruction models were:
+### Model Naming
 
-- **Patch Autoencoder:** embedding dimension `256`;
-- **Object-centric Autoencoder:** embedding dimension `512`.
+The predictor models follow the naming convention:
 
-For video prediction, four configurations were evaluated:
+**Pred {Representation} {Training Regime}**
 
-| Model | MSE ↓ | SSIM ↓ | PSNR ↑ | LPIPS ↓ | FVD ↓ |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| **Pred Obj AR** | **0.083** | 0.415 | **19.083** | 0.542 | 79.676 |
-| Pred Obj TF | 0.088 | 0.409 | 18.454 | 0.457 | 68.932 |
-| Pred Patch AR | 0.121 | **0.421** | 16.841 | 0.514 | 73.307 |
-| Pred Patch TF | 0.145 | 0.376 | 15.607 | **0.447** | **63.237** |
+where:
 
-Main observations:
+- **Obj** — object-centric representation produced by the mask-based autoencoder
+- **Patch** — patch-based representation produced by the ViT-style autoencoder
+- **AR** — Auto-Regressive training, where previously predicted representations are fed back into the predictor
+- **TF** — Teacher Forcing, where ground-truth representations are used as context during training
 
-- **Object-centric AR** achieves the best pixel-level accuracy.
-- **Patch AR** obtains the highest SSIM.
-- **Patch TF** achieves the best LPIPS and FVD.
-- Object-centric representations preserve object motion and identity more reliably over long rollouts.
+For the prediction experiments, the best reconstruction model from each representation type was selected:
+
+- **Patch Autoencoder:** embedding dimension `256`
+- **Object-centric Autoencoder:** embedding dimension `512`
+
+### Quantitative Results
+
+| Model           |     MSE ↓ |    SSIM ↑ |     PSNR ↑ |   LPIPS ↓ |      FVD ↓ |
+| --------------- | --------: | --------: | ---------: | --------: | ---------: |
+| **Pred Obj AR** | **0.083** |     0.415 | **19.083** |     0.542 |     79.676 |
+| Pred Obj TF     |     0.088 |     0.409 |     18.454 |     0.457 |     68.932 |
+| Pred Patch AR   |     0.121 | **0.421** |     16.841 |     0.514 |     73.307 |
+| Pred Patch TF   |     0.145 |     0.376 |     15.607 | **0.447** | **63.237** |
+
+Higher values are better for **SSIM** and **PSNR**, while lower values are better for **MSE**, **LPIPS** and **FVD**.
+
+### Main Observations
+
+**Pred Obj AR** achieves the strongest pixel-level reconstruction quality, with the lowest MSE (`0.083`) and the highest PSNR (`19.083 dB`). This indicates that object-centric representations provide useful structural information for predicting individual pixel values and maintaining object appearance during the rollout.
+
+**Pred Patch AR** achieves the highest SSIM (`0.421`). Although its pixel-level error is larger than for the object-centric models, it preserves the overall image structure particularly well.
+
+Teacher Forcing improves the perceptual metrics for both representation types. **Pred Patch TF** achieves the lowest LPIPS (`0.447`) and FVD (`63.237`), indicating the strongest perceptual similarity and video-level realism according to these metrics.
+
+The qualitative results, however, reveal an additional difference between the representations. Object-centric predictors preserve object motion and identity more consistently across longer rollouts. The object masks provide explicit structured cues about individual objects, which help the predictor maintain their location and dynamics.
+
+In the **Obj AR** setting, some objects may gradually disappear from the predicted masks toward the end of long autoregressive rollouts. This effect is reduced with Teacher Forcing, where ground-truth context provides stronger short-term supervision and helps keep object representations localized.
+
+Patch-based predictors preserve the global scene structure, but motion tends to decrease over time. In particular, the Teacher-Forcing model produces strong short-horizon predictions but gradually converges toward smoother and more uniform frames during longer rollouts. This behavior is consistent with pixel-wise reconstruction losses encouraging averaged predictions when motion becomes uncertain.
+
+Overall, the experiments show a trade-off between different objectives:
+
+- **Object-centric representations** provide better pixel-level accuracy and more stable object dynamics.
+- **Patch-based representations** achieve stronger structural or perceptual metrics in several settings.
+- **Auto-Regressive training** better exposes the model to its own prediction errors during rollout.
+- **Teacher Forcing** produces stronger short-term perceptual quality but may suffer from motion degradation during long open-loop prediction.
 
 ---
 
 ## Qualitative Results
 
+Qualitative results of video prediction are available in the `results/` folder
+
+Interactive demos of training/evaluation are available in the notebooks:
+
+- `test_reconstruction.ipynb` — reconstruction demo for the autoencoders (bothe patch and mask)
+- `test.ipynb` — predictor training demo (Obj/RGB × TF/AR), Patch Autoencoder training
+- 
 ### Auto-Regressive Rollout
 
 <table>
@@ -135,16 +169,8 @@ Main observations:
 
 Object-centric representations provide a stronger inductive bias for tracking objects and maintaining motion. RGB-based models remain competitive on perceptual metrics, but their dynamics tend to weaken during longer rollouts.
 
-The experiments also show that pixel accuracy, structural similarity, and perceptual video quality do not necessarily favor the same model.
+The experiments also show that pixel accuracy, structural similarity and perceptual video quality do not necessarily favor the same model.
 
 ---
 
 
-## Results
-
-Qualitative results of video prediction are available in the `results/` folder
-
-Interactive demos of training/evaluation are available in the notebooks:
-
-- `test_reconstruction.ipynb` — reconstruction demo for the autoencoders (bothe patch and mask)
-- `test.ipynb` — predictor training demo (Obj/RGB × TF/AR), Patch Autoencoder training
