@@ -152,13 +152,13 @@ Interactive demos of training/evaluation are available in the notebooks:
   </tr>
   <tr>
     <td align="center">
-      <img src="results/Pred_RGB_AR/validation_000008/rollout_gt_000000.gif" alt="Ground-truth sequence" width="280">
+      <img src="results/Pred_RGB_AR/validation_000008/rollout_gt_000000.gif" alt="Ground-truth sequence" width="260">
     </td>
     <td align="center">
-      <img src="results/Pred_RGB_TF/validation_000008/rollout_val_000000.gif" alt="Teacher-Forcing rollout with patch representation" width="280">
+      <img src="results/Pred_RGB_TF/validation_000008/rollout_val_000000.gif" alt="Teacher-Forcing rollout with patch representation" width="260">
     </td>
     <td align="center">
-      <img src="results/Pred_Obj_TF/validation_000008/rollout_val_000000.gif" alt="Teacher-Forcing rollout with object-centric representation" width="280">
+      <img src="results/Pred_Obj_TF/validation_000008/rollout_val_000000.gif" alt="Teacher-Forcing rollout with object-centric representation" width="260">
     </td>
   </tr>
 </table>
