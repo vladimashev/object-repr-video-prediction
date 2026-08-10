@@ -73,14 +73,14 @@ For video prediction, four configurations were evaluated:
 | --- | ---: | ---: | ---: | ---: | ---: |
 | **Pred Obj AR** | **0.083** | 0.415 | **19.083** | 0.542 | 79.676 |
 | Pred Obj TF | 0.088 | 0.409 | 18.454 | 0.457 | 68.932 |
-| Pred RGB AR | 0.121 | **0.421** | 16.841 | 0.514 | 73.307 |
-| Pred RGB TF | 0.145 | 0.376 | 15.607 | **0.447** | **63.237** |
+| Pred Patch AR | 0.121 | **0.421** | 16.841 | 0.514 | 73.307 |
+| Pred Patch TF | 0.145 | 0.376 | 15.607 | **0.447** | **63.237** |
 
 Main observations:
 
 - **Object-centric AR** achieves the best pixel-level accuracy.
-- **RGB AR** obtains the highest SSIM.
-- **RGB TF** achieves the best LPIPS and FVD.
+- **Patch AR** obtains the highest SSIM.
+- **Patch TF** achieves the best LPIPS and FVD.
 - Object-centric representations preserve object motion and identity more reliably over long rollouts.
 
 ---
@@ -103,7 +103,7 @@ Main observations:
       <img src="results/Pred_RGB_AR/validation_000008/rollout_val_000000.gif" alt="Auto-Regressive rollout with patch representation" width="280">
     </td>
     <td align="center">
-      <img src="results/Pred_Obj_AR/validation_000008/rollout_gt_000000.gif" alt="Auto-Regressive rollout with object-centric representation" width="280">
+      <img src="results/Pred_Obj_AR/validation_000008/rollout_val_000000.gif" alt="Auto-Regressive rollout with object-centric representation" width="280">
     </td>
   </tr>
 </table>
