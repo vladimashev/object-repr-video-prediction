@@ -52,6 +52,114 @@ The predictor receives embeddings from five seed frames and applies spatial and 
 
 ---
 
+## Dataset
+
+Experiments are performed on **MOVi-C**, a synthetic object-centric video dataset containing moving 3D-scanned objects on realistic backgrounds.
+
+For this project, RGB frames are used by both approaches, while instance segmentation masks are additionally used by the object-centric model.
+
+---
+
+## Results
+
+The best reconstruction models were:
+
+- **Patch Autoencoder:** embedding dimension `256`;
+- **Object-centric Autoencoder:** embedding dimension `512`.
+
+For video prediction, four configurations were evaluated:
+
+| Model | MSE ↓ | SSIM ↓ | PSNR ↑ | LPIPS ↓ | FVD ↓ |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| **Pred Obj AR** | **0.083** | 0.415 | **19.083** | 0.542 | 79.676 |
+| Pred Obj TF | 0.088 | 0.409 | 18.454 | 0.457 | 68.932 |
+| Pred RGB AR | 0.121 | **0.421** | 16.841 | 0.514 | 73.307 |
+| Pred RGB TF | 0.145 | 0.376 | 15.607 | **0.447** | **63.237** |
+
+Main observations:
+
+- **Object-centric AR** achieves the best pixel-level accuracy.
+- **RGB AR** obtains the highest SSIM.
+- **RGB TF** achieves the best LPIPS and FVD.
+- Object-centric representations preserve object motion and identity more reliably over long rollouts.
+
+---
+
+## Qualitative Results
+
+### Auto-Regressive Rollout
+
+<table>
+  <tr>
+    <th align="center">Ground Truth</th>
+    <th align="center">Patch Representation</th>
+    <th align="center">Object-Centric Representation</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="results/Pred_RGB_AR/validation_000008/rollout_gt_000000.gif" alt="Ground-truth sequence" width="280">
+    </td>
+    <td align="center">
+      <img src="results/Pred_RGB_AR/validation_000008/rollout_val_000000.gif" alt="Auto-Regressive rollout with patch representation" width="280">
+    </td>
+    <td align="center">
+      <img src="results/Pred_Obj_AR/validation_000008/rollout_gt_000000.gif" alt="Auto-Regressive rollout with object-centric representation" width="280">
+    </td>
+  </tr>
+</table>
+
+---
+
+### Teacher-Forcing Rollout
+
+<table>
+  <tr>
+    <th align="center">Ground Truth</th>
+    <th align="center">Patch Representation</th>
+    <th align="center">Object-Centric Representation</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/rollout_tf_gt.gif" alt="Ground-truth sequence" width="280">
+    </td>
+    <td align="center">
+      <img src="assets/rollout_tf_patch.gif" alt="Teacher-Forcing rollout with patch representation" width="280">
+    </td>
+    <td align="center">
+      <img src="assets/rollout_tf_obj.gif" alt="Teacher-Forcing rollout with object-centric representation" width="280">
+    </td>
+  </tr>
+</table>
+
+---
+### Teacher-Forcing Rollout
+
+<table>
+  <tr>
+    <th align="center">Patch Representation</th>
+    <th align="center">Object-Centric Representation</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/rollout_tf_patch.gif" alt="Teacher-Forcing rollout with patch representation" width="320">
+    </td>
+    <td align="center">
+      <img src="assets/rollout_tf_obj.gif" alt="Teacher-Forcing rollout with object-centric representation" width="320">
+    </td>
+  </tr>
+</table>
+
+---
+
+## Key Findings
+
+Object-centric representations provide a stronger inductive bias for tracking objects and maintaining motion. RGB-based models remain competitive on perceptual metrics, but their dynamics tend to weaken during longer rollouts.
+
+The experiments also show that pixel accuracy, structural similarity, and perceptual video quality do not necessarily favor the same model.
+
+---
+
+
 ## Results
 
 Qualitative results of video prediction are available in the `results/` folder
