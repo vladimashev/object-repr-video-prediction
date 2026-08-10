@@ -58,6 +58,20 @@ Experiments are performed on **MOVi-C**, a synthetic object-centric video datase
 
 For this project, RGB frames are used by both approaches, while instance segmentation masks are additionally used by the object-centric model.
 
+---
+
+### Prediction Setup
+
+The Predictor is trained using **5 seed frames** to forecast the next
+**5 frames**. During validation, prediction is extended to a
+**15-step open-loop rollout** to evaluate long-term stability and error
+accumulation.
+
+**Training:** 5 seed frames → 5 predicted frames  
+**Validation:** 5 seed frames → 15 predicted frames
+
+---
+
 ## Results
 
 ### Model Naming
