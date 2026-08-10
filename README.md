@@ -122,11 +122,9 @@ Overall, the experiments show a trade-off between different objectives:
 - **Object-centric representations** provide better pixel-level accuracy and more stable object dynamics.
 - **Patch-based representations** achieve stronger structural or perceptual metrics in several settings.
 - **Auto-Regressive training** better exposes the model to its own prediction errors during rollout.
-- **Teacher Forcing** produces stronger short-term perceptual quality but may suffer from motion degradation during long open-loop prediction.
+- **Teacher Forcing** produces stronger short-term perceptual quality but may suffer from motion degradation during long open-loop prediction.---
 
----
-
-## Qualitative Results
+### Qualitative Results
 
 Qualitative results of video prediction are available in the `results/` folder
 
